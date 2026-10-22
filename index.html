@@ -1,0 +1,903 @@
+<!doctype html>
+<html lang="nb">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>NFF Rogaland Kassebok</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: kasserer-protokoll — sticky topp med år og faner, én kolonne innhold, tall i mono-kolonner */
+:root{
+  --bg:#f3f5f7; --surface:#ffffff; --surface-2:#e9edf2; --line:#d3dae3;
+  --fg:#16202c; --muted:#5b6878;
+  --ink:#2340a0; --ink-soft:#e3e9fb; --on-ink:#ffffff;
+  --inn:#11734a; --inn-soft:#dff2e8; --ut:#b3362c; --ut-soft:#fbe6e3;
+  --warn:#8a5a00; --warn-soft:#fdf0d2;
+  --font-display:"Bricolage Grotesque", "IBM Plex Sans", system-ui, sans-serif;
+  --font-body:"IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-num:"IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f141b; --surface:#171e27; --surface-2:#1f2833; --line:#2c3644;
+  --fg:#e6ebf1; --muted:#9aa7b7;
+  --ink:#8ea6ff; --ink-soft:#1f2a4d; --on-ink:#0f141b;
+  --inn:#5fd29a; --inn-soft:#163527; --ut:#ff8b80; --ut-soft:#3d1d1a;
+  --warn:#f1bf5a; --warn-soft:#3a2e12; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f141b; --surface:#171e27; --surface-2:#1f2833; --line:#2c3644;
+  --fg:#e6ebf1; --muted:#9aa7b7;
+  --ink:#8ea6ff; --ink-soft:#1f2a4d; --on-ink:#0f141b;
+  --inn:#5fd29a; --inn-soft:#163527; --ut:#ff8b80; --ut-soft:#3d1d1a;
+  --warn:#f1bf5a; --warn-soft:#3a2e12; color-scheme:dark}
+
+*{box-sizing:border-box}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0}
+img{max-width:100%}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--fg);font-family:var(--font-body);font-size:15px;line-height:1.5}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--surface)}
+.num{font-family:var(--font-num);font-variant-numeric:tabular-nums;white-space:nowrap}
+h1,h2,h3{font-family:var(--font-display);text-wrap:balance;margin:0;letter-spacing:-.01em}
+h2{font-size:1.25rem}
+h3{font-size:1rem}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.wrap{max-width:960px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+
+header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--surface);border-bottom:1px solid var(--line)}
+.top .row1{display:flex;align-items:center;gap:12px;padding-block:12px 6px;flex-wrap:wrap}
+.top h1{font-size:1.15rem;flex:1;min-width:0}
+.top h1 small{display:block;font-family:var(--font-body);font-weight:400;font-size:.78rem;color:var(--muted);letter-spacing:0}
+.yearsel{display:flex;align-items:center;gap:6px;font-size:.85rem;color:var(--muted)}
+.yearsel select{padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--surface);font-family:var(--font-num)}
+nav.tabs{display:flex;gap:2px;overflow-x:auto;scrollbar-width:none}
+nav.tabs::-webkit-scrollbar{display:none}
+nav.tabs button{border:0;background:none;padding:10px 12px;font-weight:500;color:var(--muted);border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap}
+nav.tabs button[aria-selected="true"]{color:var(--fg);border-bottom-color:var(--ink)}
+
+main{padding-block:20px 120px;display:grid;gap:20px}
+.section{display:grid;gap:12px}
+.section-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.hint{color:var(--muted);font-size:.85rem;max-width:62ch;margin:0}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
+.pad{padding:16px}
+
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.kpi{background:var(--surface);padding:14px 16px;display:grid;gap:2px;min-width:0}
+.kpi .lbl{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.kpi .val{font-family:var(--font-num);font-size:1.25rem;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.kpi .sub{font-size:.78rem;color:var(--muted)}
+@media (max-width:640px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+.btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--surface);padding:8px 14px;border-radius:8px;cursor:pointer;font-weight:500}
+.btn:hover{background:var(--surface-2)}
+.btn.primary{background:var(--ink);color:var(--on-ink);border-color:var(--ink)}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.danger{color:var(--ut);border-color:var(--ut)}
+.btn.small{padding:5px 10px;font-size:.85rem}
+.btn:disabled{opacity:.55;cursor:default}
+.fab{position:fixed;right:calc(16px + env(safe-area-inset-right,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:6;box-shadow:0 6px 20px rgba(10,20,40,.25);padding:12px 18px;border-radius:999px}
+
+.chip{display:inline-block;font-size:.72rem;padding:2px 8px;border-radius:999px;background:var(--surface-2);color:var(--muted);white-space:nowrap;font-weight:500}
+.chip.inn{background:var(--inn-soft);color:var(--inn)}
+.chip.ut{background:var(--ut-soft);color:var(--ut)}
+.chip.warn{background:var(--warn-soft);color:var(--warn)}
+.chip.ink{background:var(--ink-soft);color:var(--ink)}
+
+/* Kassebok */
+.filters{display:flex;gap:8px;flex-wrap:wrap}
+.filters input,.filters select{padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);min-width:0}
+.filters input{flex:1 1 180px}
+.ledger{width:100%;border-collapse:collapse}
+.ledger th{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);text-align:left;font-weight:500;padding:10px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
+.ledger td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+.ledger tr.rowlink{cursor:pointer}
+.ledger tr.rowlink:hover td{background:var(--surface-2)}
+.ledger tr.reversed td{color:var(--muted)}
+.ledger tr.reversed .desc{text-decoration:line-through}
+.ledger .r{text-align:right}
+.ledger .desc{min-width:0}
+.ledger .meta{font-size:.78rem;color:var(--muted);display:flex;gap:6px;flex-wrap:wrap;margin-top:2px}
+.amt-inn{color:var(--inn)} .amt-ut{color:var(--ut)}
+.tablewrap{overflow-x:auto}
+@media (max-width:640px){
+  .ledger thead{display:none}
+  .ledger tr{display:grid;grid-template-columns:auto 1fr auto;column-gap:10px;padding:12px;border-bottom:1px solid var(--line)}
+  .ledger td{border:0;padding:0}
+  .ledger td.c-dato,.ledger td.c-kat{display:none}
+  .ledger td.c-nr{grid-row:1/3}
+  .ledger td.c-amt{grid-column:3;grid-row:1;text-align:right}
+}
+@media (min-width:641px){.m-only{display:none}}
+.empty{padding:28px 16px;text-align:center;color:var(--muted);display:grid;gap:10px;justify-items:center}
+
+/* Rapport-tabeller */
+.rtable{width:100%;border-collapse:collapse}
+.rtable th,.rtable td{padding:8px 12px;border-bottom:1px solid var(--line);text-align:left}
+.rtable th{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:500}
+.rtable .r{text-align:right}
+.rtable tr.sum td{font-weight:600;border-top:2px solid var(--fg);border-bottom:0}
+.rtable tr.grp td{background:var(--surface-2);font-weight:600;font-size:.85rem}
+.rtable input{width:110px;text-align:right;padding:5px 8px;border:1px solid var(--line);border-radius:6px;background:var(--surface);font-family:var(--font-num)}
+.bar{height:6px;border-radius:3px;background:var(--surface-2);overflow:hidden;min-width:60px}
+.bar>i{display:block;height:100%;background:var(--ink)}
+.bar.over>i{background:var(--ut)}
+
+.attn{display:grid;gap:8px}
+.attn .item{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:10px 14px;border-radius:8px;background:var(--warn-soft);color:var(--warn);font-size:.9rem;flex-wrap:wrap}
+.ok{padding:10px 14px;border-radius:8px;background:var(--inn-soft);color:var(--inn);font-size:.9rem}
+
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media (max-width:720px){.grid2{grid-template-columns:1fr}}
+.arr{display:grid;gap:10px}
+.arr .head{display:flex;justify-content:space-between;gap:12px;align-items:baseline;flex-wrap:wrap}
+.arr .nums{display:flex;gap:18px;flex-wrap:wrap;font-size:.85rem;color:var(--muted)}
+.arr .nums b{display:block;font-family:var(--font-num);font-weight:500;font-size:1rem;color:var(--fg)}
+
+.field{display:grid;gap:4px}
+.field label,.field .lbl{font-size:.8rem;color:var(--muted);font-weight:500}
+.field input,.field select,.field textarea{padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface);width:100%}
+.field textarea{min-height:70px;resize:vertical}
+.seg{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;padding:10px;background:var(--surface);cursor:pointer;font-weight:600;color:var(--muted)}
+.seg button[aria-pressed="true"].inn{background:var(--inn-soft);color:var(--inn)}
+.seg button[aria-pressed="true"].ut{background:var(--ut-soft);color:var(--ut)}
+.formgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.formgrid .full{grid-column:1/-1}
+@media (max-width:520px){.formgrid{grid-template-columns:1fr}}
+
+.overlay{position:fixed;inset:0;z-index:20;background:rgba(8,14,24,.45);display:flex;align-items:flex-end;justify-content:center}
+@media (min-width:700px){.overlay{align-items:center}}
+.sheet{background:var(--surface);width:100%;max-width:620px;max-height:92vh;overflow:auto;border-radius:16px 16px 0 0;padding:20px max(16px,env(safe-area-inset-right,0px)) calc(20px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));display:grid;gap:14px}
+@media (min-width:700px){.sheet{border-radius:16px}}
+.sheet .actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.sheet dl{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;margin:0}
+.sheet dt{color:var(--muted);font-size:.85rem}
+.sheet dd{margin:0;min-width:0;overflow-wrap:anywhere}
+.thumbs{display:flex;gap:10px;flex-wrap:wrap}
+.thumbs a{display:grid;gap:4px;width:110px;font-size:.75rem;color:var(--ink);text-decoration:none;overflow-wrap:anywhere}
+.thumbs .t{width:110px;height:110px;border-radius:8px;border:1px solid var(--line);background:var(--surface-2);display:grid;place-items:center;overflow:hidden;font-family:var(--font-num);color:var(--muted)}
+.thumbs img{width:100%;height:100%;object-fit:cover}
+.notice{padding:10px 14px;border-radius:8px;background:var(--ink-soft);color:var(--ink);font-size:.88rem}
+.notice.warn{background:var(--warn-soft);color:var(--warn)}
+
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom,0px));z-index:30;background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:8px;font-size:.9rem;max-width:calc(100% - 32px)}
+.listedit{display:grid;gap:6px}
+.listedit .li{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:6px 10px;border:1px solid var(--line);border-radius:8px;font-size:.9rem}
+.addrow{display:flex;gap:8px}
+.addrow input{flex:1;min-width:0;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+.login{min-height:80vh;display:grid;place-items:center;padding-block:40px}
+.login .card{width:100%;max-width:380px;display:grid;gap:14px;padding:24px}
+.login h1{font-size:1.5rem}
+.linkbtn{background:none;border:0;color:var(--ink);cursor:pointer;padding:0;font-size:.85rem;text-decoration:underline}
+.loading{color:var(--muted);padding:40px 0;text-align:center}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+</head>
+<body>
+
+<section class="login wrap" id="login" hidden>
+  <form class="panel card" id="loginForm" novalidate>
+    <div><h1>Kassebok</h1><p class="hint">Norsk Fosterhjemsforening Rogaland. Kun for kasserer.</p></div>
+    <div class="field"><label for="lEmail">E-post</label><input id="lEmail" type="email" autocomplete="username" required></div>
+    <div class="field"><label for="lPass">Passord</label><input id="lPass" type="password" autocomplete="current-password" required></div>
+    <div id="lErr" class="notice warn" hidden></div>
+    <button class="btn primary" id="lBtn">Logg inn</button>
+    <button type="button" class="linkbtn" id="lReset">Glemt passord? Send lenke på e-post</button>
+  </form>
+</section>
+
+<div id="app" hidden>
+<header class="top">
+  <div class="wrap">
+    <div class="row1">
+      <h1 id="orgName">Kassebok<small id="orgSub">Norsk Fosterhjemsforening Rogaland</small></h1>
+      <div class="yearsel"><label for="year">Regnskapsår</label><select id="year"></select></div>
+      <button class="btn small" id="logout">Logg ut</button>
+    </div>
+    <nav class="tabs" role="tablist" id="tabs"></nav>
+  </div>
+</header>
+
+<main class="wrap" id="main"><div class="loading">Henter regnskapet …</div></main>
+<button class="btn primary fab" id="fab" hidden>+ Ny postering</button>
+<div id="modal"></div>
+</div>
+<div id="toast" class="toast" hidden></div>
+
+<script>
+(() => {
+const TABS = [
+  ["oversikt","Oversikt"],["kassebok","Kassebok"],["budsjett","Budsjett"],
+  ["arrangementer","Arrangementer"],["rapport","Årsrapport"],["innstillinger","Innstillinger"]
+];
+const DEFAULTS = {
+  navn: "Norsk Fosterhjemsforening Rogaland",
+  orgnr: "",
+  kategorier: {
+    inn: ["Medlemskontingent","Tilskudd og støtte","Deltakeravgift arrangement","Gaver","Renteinntekter","Andre inntekter"],
+    ut: ["Lokale og overnatting","Mat og servering","Foredragsholdere og honorar","Reise","Aktiviteter for barn","Kontor, porto og trykk","Bankgebyr","Gaver og oppmerksomhet","Andre utgifter"]
+  },
+  arrangementer: ["Familiesamling 2026"],
+  budsjett: {},
+  saldo: {},
+  avstemt: {}
+};
+const nf = new Intl.NumberFormat("nb-NO",{minimumFractionDigits:2,maximumFractionDigits:2});
+const kr = n => nf.format(Math.round((n||0)*100)/100);
+const esc = s => String(s ?? "").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const today = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; };
+const fmtDate = s => s ? s.split("-").reverse().join(".") : "";
+const parseAmt = s => { const v = Number(String(s).replace(/\s|kr/gi,"").replace(",",".")); return isFinite(v) ? v : NaN; };
+const $ = id => document.getElementById(id);
+
+const S = { settings: structuredClone(DEFAULTS), hasSettings:false, rows: [], loaded:false,
+  year: new Date().getFullYear(), tab: "oversikt", q:"", fKat:"", fArr:"", fBilag:"" };
+let db=null, assets=null, downloads=null, canWrite=true;
+
+try { const t = localStorage.getItem("kb-tab"); if (t && TABS.some(x=>x[0]===t)) S.tab=t; } catch(e){}
+if (location.hash && TABS.some(x=>x[0]===location.hash.slice(1))) S.tab = location.hash.slice(1);
+
+function toast(msg){ const t=$("toast"); t.textContent=msg; t.hidden=false; clearTimeout(toast._t); toast._t=setTimeout(()=>t.hidden=true,3200); }
+
+/* ---------- Beregninger ---------- */
+const yearRows = () => S.rows.filter(r=>r.aar===S.year);
+const signed = r => r.type==="inn" ? r.belop : -r.belop;
+function sums(rows){
+  let inn=0, ut=0; const byKat={}, byKonto={bank:0,kontant:0};
+  for (const r of rows){
+    if (r.type==="inn") inn+=r.belop; else ut+=r.belop;
+    const k = r.type+"|"+r.kategori; byKat[k]=(byKat[k]||0)+r.belop;
+    byKonto[r.konto||"bank"]=(byKonto[r.konto||"bank"]||0)+signed(r);
+  }
+  return {inn, ut, res:inn-ut, byKat, byKonto};
+}
+const saldo = y => S.settings.saldo?.[y] || {bank:0,kontant:0};
+const budsjett = y => S.settings.budsjett?.[y] || {};
+const missingBilag = rows => rows.filter(r=>!(r.bilag&&r.bilag.length) && !r.korrigerer);
+function nextNr(year){ return S.rows.filter(r=>r.aar===year).reduce((m,r)=>Math.max(m,r.nr||0),0)+1; }
+function years(){
+  const set = new Set([new Date().getFullYear(), S.year]);
+  S.rows.forEach(r=>set.add(r.aar));
+  Object.keys(S.settings.budsjett||{}).forEach(y=>set.add(+y));
+  const max = Math.max(...set); set.add(max+1);
+  return [...set].sort((a,b)=>b-a);
+}
+
+/* ---------- Lagring ---------- */
+async function saveSettings(patch){
+  if (!db) return toast("Lagring er ikke tilgjengelig her.");
+  Object.assign(S.settings, patch);
+  try {
+    const ref = db.doc("regnskap/innstillinger");
+    if (S.hasSettings) await ref.update(patch);
+    else { await ref.set(S.settings); S.hasSettings=true; }
+  } catch(e){ toast(writeErr(e)); }
+}
+function writeErr(e){
+  if (e?.code==="invalid_argument" || e?.code==="permission-denied") return "Du har ikke tilgang til å endre regnskapet. Prøv å logge inn på nytt.";
+  if (e?.code==="unavailable") return "Ingen nettforbindelse. Prøv igjen når du er på nett.";
+  if (e?.code==="quota_exceeded") return "Lagringsplassen er full. Gi beskjed til Claude.";
+  return "Kunne ikke lagre: " + (e?.message || "ukjent feil");
+}
+
+/* ---------- Render ---------- */
+function renderChrome(){
+  $("orgSub").textContent = S.settings.navn || "Forening";
+  const ys = years();
+  $("year").innerHTML = ys.map(y=>`<option value="${y}" ${y===S.year?"selected":""}>${y}</option>`).join("");
+  $("tabs").innerHTML = TABS.map(([k,l])=>`<button role="tab" data-tab="${k}" aria-selected="${S.tab===k}">${l}</button>`).join("");
+  $("fab").hidden = !canWrite || !S.loaded;
+}
+function render(){
+  renderChrome();
+  if (!S.loaded) return;
+  const m = $("main");
+  const views = {oversikt:vOversikt, kassebok:vKassebok, budsjett:vBudsjett, arrangementer:vArr, rapport:vRapport, innstillinger:vInnst};
+  m.innerHTML = views[S.tab]();
+  bindView();
+}
+
+function ledgerRows(rows, compact){
+  if (!rows.length) return "";
+  return `<div class="tablewrap"><table class="ledger"><thead><tr><th>Bilag</th><th>Dato</th><th>Beskrivelse</th><th>Kategori</th><th class="r">Beløp</th></tr></thead><tbody>
+  ${rows.map(r=>{
+    const rev = !!r.korrigertAv;
+    const chips = [
+      r.arrangement ? `<span class="chip ink">${esc(r.arrangement)}</span>`:"",
+      r.konto==="kontant" ? `<span class="chip">Kontant</span>`:"",
+      r.korrigerer ? `<span class="chip">Korrigerer #${r.korrigerer}</span>`:"",
+      rev ? `<span class="chip">Korrigert av #${r.korrigertAv}</span>`:"",
+      (!r.bilag||!r.bilag.length) && !r.korrigerer ? `<span class="chip warn">Mangler bilag</span>` : `<span class="chip">${r.bilag?.length? "📎 "+r.bilag.length:""}</span>`
+    ].join("");
+    return `<tr class="rowlink ${rev?"reversed":""}" data-id="${esc(r.id)}" tabindex="0">
+      <td class="c-nr num">#${r.nr}</td>
+      <td class="c-dato num">${fmtDate(r.dato)}</td>
+      <td class="desc"><div class="desc">${esc(r.beskrivelse)}</div><div class="meta"><span class="num m-only">${fmtDate(r.dato)}</span><span class="m-only">${esc(r.kategori)}</span>${chips}</div></td>
+      <td class="c-kat">${esc(r.kategori)}</td>
+      <td class="c-amt r num ${r.type==="inn"?"amt-inn":"amt-ut"}">${r.type==="inn"?"+":"−"} ${kr(Math.abs(r.belop))}${r.belop<0?" (korr.)":""}</td>
+    </tr>`;}).join("")}
+  </tbody></table></div>`;
+}
+
+function vOversikt(){
+  const rows = yearRows(), s = sums(rows), sal = saldo(S.year);
+  const ib = (sal.bank||0)+(sal.kontant||0);
+  const miss = missingBilag(rows);
+  const b = budsjett(S.year);
+  const over = Object.entries(b).filter(([k,v])=>v>0 && (s.byKat[k]||0)>v && k.startsWith("ut|"));
+  const latest = [...rows].sort((a,b)=>b.nr-a.nr).slice(0,5);
+  return `
+  <section class="section">
+    <div class="kpis">
+      <div class="kpi"><span class="lbl">Inntekter ${S.year}</span><span class="val amt-inn">${kr(s.inn)}</span><span class="sub">${rows.filter(r=>r.type==="inn").length} posteringer</span></div>
+      <div class="kpi"><span class="lbl">Utgifter ${S.year}</span><span class="val amt-ut">${kr(s.ut)}</span><span class="sub">${rows.filter(r=>r.type==="ut").length} posteringer</span></div>
+      <div class="kpi"><span class="lbl">Resultat</span><span class="val">${kr(s.res)}</span><span class="sub">${s.res>=0?"Overskudd":"Underskudd"}</span></div>
+      <div class="kpi"><span class="lbl">Beholdning nå</span><span class="val">${kr(ib+s.res)}</span><span class="sub">Inngående ${kr(ib)}</span></div>
+    </div>
+  </section>
+  <section class="section">
+    <div class="section-head"><h2>Trenger oppmerksomhet</h2></div>
+    <div class="attn">
+      ${!S.hasSettings || (S.settings.saldo?.[S.year]==null) ? `<div class="item"><span>Inngående saldo for ${S.year} er ikke lagt inn. Bruk saldoen på kontoutskriften per 1. januar.</span><button class="btn small" data-go="innstillinger">Legg inn</button></div>`:""}
+      ${miss.length ? `<div class="item"><span>${miss.length} postering${miss.length>1?"er":""} mangler bilag. Revisor trenger kvittering eller faktura for hver.</span><button class="btn small" data-go="kassebok" data-fbilag="mangler">Vis</button></div>`:""}
+      ${over.map(([k,v])=>`<div class="item"><span>${esc(k.split("|")[1])} er over budsjett: <span class="num">${kr(s.byKat[k])}</span> av <span class="num">${kr(v)}</span></span><button class="btn small" data-go="budsjett">Se budsjett</button></div>`).join("")}
+      ${(S.settings.saldo?.[S.year]!=null && !miss.length && !over.length) ? `<div class="ok">Alt ser ryddig ut for ${S.year}. Alle posteringer har bilag.</div>`:""}
+    </div>
+  </section>
+  <section class="section">
+    <div class="section-head"><h2>Siste posteringer</h2>${rows.length?`<button class="btn small" data-go="kassebok">Hele kasseboka</button>`:""}</div>
+    <div class="panel">${latest.length ? ledgerRows(latest,true) : emptyLedger()}</div>
+  </section>`;
+}
+function emptyLedger(){
+  return `<div class="empty"><strong>Ingen posteringer i ${S.year} ennå</strong><span>Hver inntekt og utgift føres som en postering med et bilag (kvittering, faktura eller kontoutskrift). Bilagene nummereres fortløpende fra #1 hvert år.</span>${canWrite?`<button class="btn primary" data-new>+ Før første postering</button>`:""}</div>`;
+}
+
+function filteredRows(){
+  const q = S.q.trim().toLowerCase();
+  return yearRows().filter(r=>{
+    if (S.fKat && r.kategori!==S.fKat) return false;
+    if (S.fArr && (S.fArr==="__ingen" ? r.arrangement : r.arrangement!==S.fArr)) return false;
+    if (S.fBilag==="mangler" && ((r.bilag&&r.bilag.length) || r.korrigerer)) return false;
+    if (q && !(`${r.nr} ${r.beskrivelse} ${r.kategori} ${r.arrangement||""} ${r.notat||""} ${kr(r.belop)}`.toLowerCase().includes(q))) return false;
+    return true;
+  }).sort((a,b)=>b.nr-a.nr);
+}
+function vKassebok(){
+  const all = yearRows(); const rows = filteredRows(); const s = sums(rows);
+  const kats = [...S.settings.kategorier.inn, ...S.settings.kategorier.ut];
+  return `<section class="section">
+    <div class="section-head"><h2>Kassebok ${S.year}</h2><span class="hint">${all.length} posteringer · ny får bilag #${nextNr(S.year)}</span></div>
+    <div class="filters">
+      <input id="q" type="search" placeholder="Søk i beskrivelse, beløp, bilagsnr" value="${esc(S.q)}">
+      <select id="fKat"><option value="">Alle kategorier</option>${kats.map(k=>`<option ${S.fKat===k?"selected":""}>${esc(k)}</option>`).join("")}</select>
+      <select id="fArr"><option value="">Alle arrangementer</option><option value="__ingen" ${S.fArr==="__ingen"?"selected":""}>Uten arrangement</option>${S.settings.arrangementer.map(a=>`<option ${S.fArr===a?"selected":""}>${esc(a)}</option>`).join("")}</select>
+      <select id="fBilag"><option value="">Alle</option><option value="mangler" ${S.fBilag==="mangler"?"selected":""}>Mangler bilag</option></select>
+    </div>
+    <div class="panel">${all.length ? (rows.length ? ledgerRows(rows) : `<div class="empty">Ingen posteringer passer filteret.</div>`) : emptyLedger()}</div>
+    ${rows.length ? `<div class="hint">Utvalg: inn <span class="num amt-inn">${kr(s.inn)}</span> · ut <span class="num amt-ut">${kr(s.ut)}</span> · netto <span class="num">${kr(s.res)}</span></div>`:""}
+    <div class="hint">Posteringer kan ikke slettes. En feil rettes med «Korriger», som lager en motpostering slik at revisor ser hva som ble endret.</div>
+  </section>`;
+}
+
+function vBudsjett(){
+  const s = sums(yearRows()), b = budsjett(S.year);
+  const block = (type, title) => {
+    const kats = S.settings.kategorier[type];
+    let tb=0, tf=0;
+    const rows = kats.map(k=>{
+      const key=type+"|"+k, bud=b[key]||0, fak=s.byKat[key]||0; tb+=bud; tf+=fak;
+      const pct = bud>0 ? Math.min(100, fak/bud*100) : 0;
+      const over = type==="ut" && bud>0 && fak>bud;
+      return `<tr><td>${esc(k)}</td>
+        <td class="r">${canWrite?`<input inputmode="decimal" data-bud="${esc(key)}" id="bud-${esc(key).replace(/\W/g,"_")}" value="${bud?kr(bud):""}" placeholder="0,00">`:`<span class="num">${kr(bud)}</span>`}</td>
+        <td class="r num">${kr(fak)}</td>
+        <td class="r num ${fak-bud<0&&type==="inn"||over?"amt-ut":""}">${kr(fak-bud)}</td>
+        <td><div class="bar ${over?"over":""}"><i style="width:${pct}%"></i></div></td></tr>`;
+    }).join("");
+    return `<tr class="grp"><td colspan="5">${title}</td></tr>${rows}
+      <tr class="sum"><td>Sum ${title.toLowerCase()}</td><td class="r num">${kr(tb)}</td><td class="r num">${kr(tf)}</td><td class="r num">${kr(tf-tb)}</td><td></td></tr>`;
+  };
+  const totB = Object.entries(b).reduce((m,[k,v])=>m+(k.startsWith("inn|")?v:-v),0);
+  return `<section class="section">
+    <div class="section-head"><h2>Budsjett mot faktisk ${S.year}</h2></div>
+    <p class="hint">Skriv inn budsjettet slik årsmøtet vedtok det. Feltene lagres når du går ut av dem. Avvik viser faktisk minus budsjett.</p>
+    <div class="panel tablewrap"><table class="rtable">
+      <thead><tr><th>Post</th><th class="r">Budsjett</th><th class="r">Faktisk</th><th class="r">Avvik</th><th>Brukt</th></tr></thead>
+      <tbody>${block("inn","Inntekter")}${block("ut","Utgifter")}
+      <tr class="sum"><td>Budsjettert resultat / faktisk</td><td class="r num">${kr(totB)}</td><td class="r num">${kr(s.res)}</td><td class="r num">${kr(s.res-totB)}</td><td></td></tr>
+      </tbody></table></div>
+  </section>`;
+}
+
+function arrStats(name){
+  const rows = yearRows().filter(r=>r.arrangement===name); const s=sums(rows);
+  return {rows, ...s};
+}
+function vArr(){
+  const list = S.settings.arrangementer;
+  const cards = list.map(a=>{
+    const st = arrStats(a);
+    const kats = Object.entries(st.byKat).sort((x,y)=>x[0].localeCompare(y[0]));
+    return `<div class="panel pad arr">
+      <div class="head"><h3>${esc(a)}</h3><span class="chip ${st.res>=0?"inn":"ut"}">${st.res>=0?"Overskudd":"Underskudd"} <span class="num">${kr(st.res)}</span></span></div>
+      <div class="nums"><span>Inntekter<b class="amt-inn">${kr(st.inn)}</b></span><span>Utgifter<b class="amt-ut">${kr(st.ut)}</b></span><span>Posteringer<b>${st.rows.length}</b></span></div>
+      ${kats.length?`<table class="rtable"><tbody>${kats.map(([k,v])=>`<tr><td>${esc(k.split("|")[1])}</td><td class="r num ${k.startsWith("inn")?"amt-inn":"amt-ut"}">${k.startsWith("inn")?"+":"−"} ${kr(v)}</td></tr>`).join("")}</tbody></table>`:`<span class="hint">Ingen posteringer knyttet til dette arrangementet i ${S.year}.</span>`}
+      ${st.rows.length?`<div><button class="btn small" data-go="kassebok" data-farr="${esc(a)}">Vis posteringene</button></div>`:""}
+    </div>`;
+  }).join("");
+  return `<section class="section">
+    <div class="section-head"><h2>Regnskap per arrangement ${S.year}</h2></div>
+    <p class="hint">Knytt en postering til et arrangement når du fører den, så samles inntekter og kostnader her. Nyttig når dere skal rapportere tilbake til de som ga tilskudd.</p>
+    <div class="grid2">${cards || `<div class="panel empty">Ingen arrangementer ennå.</div>`}</div>
+    ${canWrite?`<div class="panel pad"><div class="field"><label for="newArr">Legg til arrangement</label><div class="addrow"><input id="newArr" placeholder="F.eks. Juleavslutning 2026"><button class="btn" id="addArr">Legg til</button></div></div></div>`:""}
+  </section>`;
+}
+
+function reportData(){
+  const rows = yearRows(), s = sums(rows), sal = saldo(S.year), b = budsjett(S.year);
+  const ibBank = sal.bank||0, ibKont = sal.kontant||0;
+  const ubBank = ibBank + (s.byKonto.bank||0), ubKont = ibKont + (s.byKonto.kontant||0);
+  const avst = S.settings.avstemt?.[S.year];
+  return {rows, s, b, ibBank, ibKont, ubBank, ubKont, avst};
+}
+function resultTable(d, forExport){
+  const line = (type) => S.settings.kategorier[type].map(k=>{
+    const key=type+"|"+k, v=d.s.byKat[key]||0, bud=d.b[key]||0;
+    if (!v && !bud) return "";
+    return `<tr><td>${esc(k)}</td><td class="r num">${kr(v)}</td><td class="r num">${kr(bud)}</td></tr>`;
+  }).join("");
+  const tb = t => Object.entries(d.b).filter(([k])=>k.startsWith(t+"|")).reduce((m,[,v])=>m+v,0);
+  return `<table class="rtable"><thead><tr><th>Resultatregnskap ${S.year}</th><th class="r">Regnskap</th><th class="r">Budsjett</th></tr></thead><tbody>
+    <tr class="grp"><td colspan="3">Inntekter</td></tr>${line("inn") || `<tr><td colspan="3">Ingen inntekter ført</td></tr>`}
+    <tr class="sum"><td>Sum inntekter</td><td class="r num">${kr(d.s.inn)}</td><td class="r num">${kr(tb("inn"))}</td></tr>
+    <tr class="grp"><td colspan="3">Kostnader</td></tr>${line("ut") || `<tr><td colspan="3">Ingen kostnader ført</td></tr>`}
+    <tr class="sum"><td>Sum kostnader</td><td class="r num">${kr(d.s.ut)}</td><td class="r num">${kr(tb("ut"))}</td></tr>
+    <tr class="sum"><td>Årsresultat</td><td class="r num">${kr(d.s.res)}</td><td class="r num">${kr(tb("inn")-tb("ut"))}</td></tr>
+  </tbody></table>`;
+}
+function balanceTable(d){
+  const showK = d.ibKont || d.s.byKonto.kontant;
+  return `<table class="rtable"><thead><tr><th>Beholdning</th><th class="r">1. januar</th><th class="r">Endring</th><th class="r">31. desember</th></tr></thead><tbody>
+    <tr><td>Bank</td><td class="r num">${kr(d.ibBank)}</td><td class="r num">${kr(d.s.byKonto.bank||0)}</td><td class="r num">${kr(d.ubBank)}</td></tr>
+    ${showK?`<tr><td>Kontanter</td><td class="r num">${kr(d.ibKont)}</td><td class="r num">${kr(d.s.byKonto.kontant||0)}</td><td class="r num">${kr(d.ubKont)}</td></tr>`:""}
+    <tr class="sum"><td>Sum</td><td class="r num">${kr(d.ibBank+d.ibKont)}</td><td class="r num">${kr(d.s.res)}</td><td class="r num">${kr(d.ubBank+d.ubKont)}</td></tr>
+  </tbody></table>`;
+}
+function vRapport(){
+  const d = reportData();
+  const arrs = S.settings.arrangementer.map(a=>[a,arrStats(a)]).filter(([,x])=>x.rows.length);
+  const diff = d.avst!=null ? Math.round((d.avst - d.ubBank)*100)/100 : null;
+  const miss = missingBilag(d.rows).length;
+  return `<section class="section">
+    <div class="section-head"><h2>Årsrapport ${S.year}</h2>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" id="dlReport">Last ned årsrapport</button><button class="btn" id="openReport">Åpne for utskrift</button><button class="btn" id="dlCsv">Last ned kassebok (CSV)</button></div></div>
+    <p class="hint">«Åpne for utskrift» viser rapporten i en ny fane der du velger Skriv ut → Lagre som PDF. Kasseboka lastes ned som en fil som åpnes i Excel. Bilagene ligger her og kan vises for revisor direkte fra hver postering.</p>
+    ${miss?`<div class="notice warn">${miss} postering${miss>1?"er":""} mangler bilag. Revisor vil spørre etter disse.</div>`:""}
+    <div class="panel tablewrap">${resultTable(d)}</div>
+    <div class="panel tablewrap">${balanceTable(d)}</div>
+    <div class="panel pad section">
+      <h3>Avstemming mot bank</h3>
+      <p class="hint">Skriv inn saldoen på kontoutskriften per 31. desember. Den skal være lik beregnet banksaldo. Et avvik betyr at noe mangler eller er ført feil.</p>
+      <div class="addrow">${canWrite?`<input id="avst" inputmode="decimal" placeholder="Saldo på kontoutskrift" value="${d.avst!=null?kr(d.avst):""}">`:`<span class="num">${d.avst!=null?kr(d.avst):"Ikke lagt inn"}</span>`}</div>
+      ${diff===null?"":diff===0?`<div class="ok">Stemmer med beregnet banksaldo <span class="num">${kr(d.ubBank)}</span>.</div>`:`<div class="notice warn">Avvik på <span class="num">${kr(diff)}</span> mot beregnet banksaldo <span class="num">${kr(d.ubBank)}</span>.</div>`}
+    </div>
+    ${arrs.length?`<div class="panel tablewrap"><table class="rtable"><thead><tr><th>Arrangement</th><th class="r">Inntekter</th><th class="r">Kostnader</th><th class="r">Netto</th></tr></thead><tbody>${arrs.map(([a,x])=>`<tr><td>${esc(a)}</td><td class="r num">${kr(x.inn)}</td><td class="r num">${kr(x.ut)}</td><td class="r num">${kr(x.res)}</td></tr>`).join("")}</tbody></table></div>`:""}
+  </section>`;
+}
+
+function vInnst(){
+  const sal = saldo(S.year), st=S.settings;
+  const used = new Set(S.rows.map(r=>r.type+"|"+r.kategori));
+  const usedArr = new Set(S.rows.map(r=>r.arrangement).filter(Boolean));
+  const katList = type => `<div class="listedit">${st.kategorier[type].map((k,i)=>`<div class="li"><span>${esc(k)}</span>${canWrite && !used.has(type+"|"+k)?`<button class="btn small" data-rmkat="${type}|${i}">Fjern</button>`:`<span class="chip">I bruk</span>`}</div>`).join("")}
+    ${canWrite?`<div class="addrow"><input id="nk-${type}" placeholder="Ny kategori"><button class="btn small" data-addkat="${type}">Legg til</button></div>`:""}</div>`;
+  const dis = canWrite?"":"disabled";
+  return `<section class="section">
+    <h2>Innstillinger</h2>
+    <div class="panel pad formgrid">
+      <div class="field full"><label for="sNavn">Foreningens navn</label><input id="sNavn" value="${esc(st.navn)}" ${dis}></div>
+      <div class="field"><label for="sOrg">Organisasjonsnummer</label><input id="sOrg" inputmode="numeric" value="${esc(st.orgnr)}" placeholder="9 siffer" ${dis}></div>
+    </div>
+    <div class="panel pad section">
+      <h3>Inngående saldo 1. januar ${S.year}</h3>
+      <p class="hint">Hent tallet fra kontoutskriften. Neste år kan du bruke utgående saldo fra årsrapporten.</p>
+      <div class="formgrid">
+        <div class="field"><label for="ibBank">Bankkonto</label><input id="ibBank" inputmode="decimal" value="${S.settings.saldo?.[S.year]!=null?kr(sal.bank):""}" placeholder="0,00" ${dis}></div>
+        <div class="field"><label for="ibKont">Kontantkasse</label><input id="ibKont" inputmode="decimal" value="${S.settings.saldo?.[S.year]!=null?kr(sal.kontant):""}" placeholder="0,00" ${dis}></div>
+      </div>
+      ${canWrite && S.settings.saldo?.[S.year]==null && S.year>Math.min(...years()) ? `<div><button class="btn small" id="carry">Hent utgående saldo fra ${S.year-1}</button></div>`:""}
+    </div>
+    <div class="grid2">
+      <div class="panel pad section"><h3>Inntektskategorier</h3>${katList("inn")}</div>
+      <div class="panel pad section"><h3>Utgiftskategorier</h3>${katList("ut")}</div>
+    </div>
+    <div class="panel pad section"><h3>Arrangementer</h3>
+      <div class="listedit">${st.arrangementer.map((a,i)=>`<div class="li"><span>${esc(a)}</span>${canWrite && !usedArr.has(a)?`<button class="btn small" data-rmarr="${i}">Fjern</button>`:`<span class="chip">I bruk</span>`}</div>`).join("")}</div>
+    </div>
+    <p class="hint">Kategorier og arrangementer som er brukt i en postering kan ikke fjernes, slik at gamle bilag fortsatt henger sammen.</p>
+    <div class="panel pad section"><h3>Sikkerhetskopi</h3>
+      <p class="hint">Last ned hele regnskapet, alle år og alle bilagsfiler, som én fil. Ta en kopi etter årsoppgjøret og legg den i Dropbox. Bokføringsloven krever at regnskap og bilag oppbevares i minst fem år.</p>
+      <div><button class="btn" id="backup">Last ned sikkerhetskopi</button></div></div>
+  </section>`;
+}
+
+/* ---------- Hendelser ---------- */
+function bindView(){
+  const m=$("main");
+  m.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>{
+    S.fBilag = b.dataset.fbilag||""; S.fArr = b.dataset.farr||""; if (b.dataset.go==="kassebok"){S.fKat="";S.q="";}
+    setTab(b.dataset.go);
+  });
+  m.querySelectorAll("[data-new]").forEach(b=>b.onclick=()=>openForm());
+  m.querySelectorAll("tr.rowlink").forEach(tr=>{
+    tr.onclick=()=>openDetail(tr.dataset.id);
+    tr.onkeydown=e=>{ if(e.key==="Enter") openDetail(tr.dataset.id); };
+  });
+  if (S.tab==="kassebok"){
+    $("q").oninput=e=>{S.q=e.target.value; const pos=e.target.selectionStart; render(); const q=$("q"); q.focus(); q.setSelectionRange(pos,pos);};
+    $("fKat").onchange=e=>{S.fKat=e.target.value;render();};
+    $("fArr").onchange=e=>{S.fArr=e.target.value;render();};
+    $("fBilag").onchange=e=>{S.fBilag=e.target.value;render();};
+  }
+  if (S.tab==="budsjett") m.querySelectorAll("[data-bud]").forEach(inp=>inp.onchange=()=>{
+    const v = inp.value.trim()==="" ? 0 : parseAmt(inp.value);
+    if (isNaN(v)) return toast("Skriv beløpet som tall, f.eks. 12 500,00");
+    const b = {...(S.settings.budsjett||{})}; b[S.year] = {...budsjett(S.year), [inp.dataset.bud]: v};
+    saveSettings({budsjett:b}).then(()=>{render(); toast("Budsjett lagret");});
+  });
+  if (S.tab==="arrangementer" && $("addArr")) $("addArr").onclick=()=>{
+    const v=$("newArr").value.trim(); if(!v) return;
+    if (S.settings.arrangementer.includes(v)) return toast("Det arrangementet finnes allerede.");
+    saveSettings({arrangementer:[...S.settings.arrangementer, v]}).then(render);
+  };
+  if (S.tab==="rapport"){
+    $("dlReport").onclick=()=>downloadReport(false); $("openReport").onclick=()=>downloadReport(true); $("dlCsv").onclick=downloadCsv;
+    if ($("avst")) $("avst").onchange=e=>{
+      const v = e.target.value.trim()==="" ? null : parseAmt(e.target.value);
+      if (Number.isNaN(v)) return toast("Skriv saldoen som tall.");
+      const a={...(S.settings.avstemt||{})}; if (v===null) delete a[S.year]; else a[S.year]=v;
+      saveSettings({avstemt:a}).then(render);
+    };
+  }
+  if (S.tab==="innstillinger" && canWrite){
+    $("sNavn").onchange=e=>saveSettings({navn:e.target.value.trim()||DEFAULTS.navn}).then(()=>{renderChrome();toast("Lagret");});
+    $("sOrg").onchange=e=>saveSettings({orgnr:e.target.value.trim()}).then(()=>toast("Lagret"));
+    const saveIB=()=>{
+      const bank = $("ibBank").value.trim()===""?0:parseAmt($("ibBank").value);
+      const kont = $("ibKont").value.trim()===""?0:parseAmt($("ibKont").value);
+      if (isNaN(bank)||isNaN(kont)) return toast("Skriv saldoen som tall.");
+      const sa={...(S.settings.saldo||{})}; sa[S.year]={bank,kontant:kont};
+      saveSettings({saldo:sa}).then(()=>{render();toast("Inngående saldo lagret");});
+    };
+    $("backup").onclick=async()=>{
+      const b=$("backup"); b.disabled=true; b.textContent="Henter alt …";
+      try{
+        const filer={};
+        const metas=(await db.collection("filer").get()).docs;
+        for (const m of metas){
+          const biter=(await db.collection("filer/"+m.id+"/biter").get()).docs.sort((a,c)=>a.id.localeCompare(c.id)).map(d=>d.data().d).join("");
+          filer[m.id]={...m.data(), data:biter};
+        }
+        const out={laget:new Date().toISOString(), innstillinger:S.settings, posteringer:S.rows, filer};
+        await save(`nffr-regnskap-sikkerhetskopi-${today()}.json`, JSON.stringify(out));
+      }catch(ex){ toast("Kunne ikke lage sikkerhetskopi: "+(ex.message||ex.code)); }
+      b.disabled=false; b.textContent="Last ned sikkerhetskopi";
+    };
+    $("ibBank").onchange=saveIB; $("ibKont").onchange=saveIB;
+    if ($("carry")) $("carry").onclick=()=>{
+      const y=S.year; S.year=y-1; const d=reportData(); S.year=y;
+      const sa={...(S.settings.saldo||{})}; sa[y]={bank:Math.round(d.ubBank*100)/100,kontant:Math.round(d.ubKont*100)/100};
+      saveSettings({saldo:sa}).then(()=>{render();toast(`Hentet utgående saldo fra ${y-1}`);});
+    };
+    $("main").querySelectorAll("[data-addkat]").forEach(b=>b.onclick=()=>{
+      const t=b.dataset.addkat, v=$("nk-"+t).value.trim(); if(!v) return;
+      if (S.settings.kategorier[t].includes(v)) return toast("Kategorien finnes allerede.");
+      const k={...S.settings.kategorier,[t]:[...S.settings.kategorier[t],v]};
+      saveSettings({kategorier:k}).then(render);
+    });
+    $("main").querySelectorAll("[data-rmkat]").forEach(b=>b.onclick=()=>{
+      const [t,i]=b.dataset.rmkat.split("|"); const arr=[...S.settings.kategorier[t]]; arr.splice(+i,1);
+      saveSettings({kategorier:{...S.settings.kategorier,[t]:arr}}).then(render);
+    });
+    $("main").querySelectorAll("[data-rmarr]").forEach(b=>b.onclick=()=>{
+      const arr=[...S.settings.arrangementer]; arr.splice(+b.dataset.rmarr,1);
+      saveSettings({arrangementer:arr}).then(render);
+    });
+  }
+}
+function setTab(t){ S.tab=t; try{localStorage.setItem("kb-tab",t);}catch(e){} render(); window.scrollTo(0,0); }
+$("tabs").addEventListener("click",e=>{ const b=e.target.closest("[data-tab]"); if(b) setTab(b.dataset.tab); });
+$("year").onchange=e=>{ S.year=+e.target.value; render(); };
+$("fab").onclick=()=>openForm();
+
+/* ---------- Skjema: ny postering ---------- */
+function closeModal(){ $("modal").innerHTML=""; document.body.style.overflow=""; if(S.loaded) render(); }
+function modal(html){
+  $("modal").innerHTML=`<div class="overlay" id="ov"><div class="sheet" role="dialog" aria-modal="true">${html}</div></div>`;
+  document.body.style.overflow="hidden";
+  $("ov").addEventListener("click",e=>{ if(e.target.id==="ov") closeModal(); });
+}
+document.addEventListener("keydown",e=>{ if(e.key==="Escape" && $("modal").innerHTML) closeModal(); });
+
+function openForm(pre){
+  if (!canWrite) return;
+  const p = pre || {type:"ut", dato: (S.year===new Date().getFullYear()? today() : `${S.year}-12-31`), konto:"bank"};
+  let type = p.type;
+  const katOpts = t => S.settings.kategorier[t].map(k=>`<option ${p.kategori===k?"selected":""}>${esc(k)}</option>`).join("");
+  modal(`
+    <h2>${pre?.korrFra?`Riktig postering etter korreksjon av #${pre.korrFra}`:"Ny postering"}</h2>
+    <div class="seg" role="group" aria-label="Type">
+      <button type="button" class="inn" data-t="inn" aria-pressed="${type==="inn"}">Inntekt</button>
+      <button type="button" class="ut" data-t="ut" aria-pressed="${type==="ut"}">Utgift</button>
+    </div>
+    <form id="pf" class="formgrid" novalidate>
+      <div class="field"><label for="fDato">Dato</label><input id="fDato" type="date" value="${esc(p.dato)}" required></div>
+      <div class="field"><label for="fBelop">Beløp (kr)</label><input id="fBelop" inputmode="decimal" placeholder="0,00" value="${p.belop?kr(p.belop):""}" required></div>
+      <div class="field full"><label for="fBesk">Beskrivelse</label><input id="fBesk" placeholder="F.eks. Leie av Stemnestaden, faktura 1042" value="${esc(p.beskrivelse||"")}" required></div>
+      <div class="field"><label for="fKat">Kategori</label><select id="fKat">${katOpts(type)}</select></div>
+      <div class="field"><label for="fArr2">Arrangement</label><select id="fArr2"><option value="">Ingen</option>${S.settings.arrangementer.map(a=>`<option ${p.arrangement===a?"selected":""}>${esc(a)}</option>`).join("")}</select></div>
+      <div class="field"><label for="fKonto">Betalt via</label><select id="fKonto"><option value="bank" ${p.konto!=="kontant"?"selected":""}>Bankkonto</option><option value="kontant" ${p.konto==="kontant"?"selected":""}>Kontanter</option></select></div>
+      <div class="field"><label for="fFiler">Bilag (kvittering, faktura)</label><input id="fFiler" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" multiple ${assets?"":"disabled"}></div>
+      <div class="field full"><label for="fNotat">Notat (valgfritt)</label><textarea id="fNotat" placeholder="Hvem betalte, hva gjelder det, vedtak i styret …">${esc(p.notat||"")}</textarea></div>
+      ${assets?"":`<div class="notice warn full">Opplasting av bilag er ikke tilgjengelig i denne visningen.</div>`}
+      <div id="fErr" class="notice warn full" hidden></div>
+      <div class="actions full"><button type="button" class="btn" id="fCancel">Avbryt</button><button class="btn primary" id="fSave">Lagre postering</button></div>
+    </form>`);
+  document.querySelectorAll(".seg button").forEach(b=>b.onclick=()=>{
+    type=b.dataset.t; document.querySelectorAll(".seg button").forEach(x=>x.setAttribute("aria-pressed",x.dataset.t===type));
+    $("fKat").innerHTML=katOpts(type);
+  });
+  $("fCancel").onclick=closeModal;
+  $("pf").onsubmit=async e=>{
+    e.preventDefault();
+    const err = m => { $("fErr").textContent=m; $("fErr").hidden=false; };
+    const dato=$("fDato").value, belop=parseAmt($("fBelop").value), besk=$("fBesk").value.trim();
+    if (!dato) return err("Velg en dato.");
+    if (isNaN(belop) || belop<=0) return err("Skriv inn et beløp over 0, f.eks. 1 250,00.");
+    if (!besk) return err("Skriv en kort beskrivelse, så revisor skjønner hva posteringen gjelder.");
+    const files=[...$("fFiler").files];
+    if (!files.length && !$("pf").dataset.okNoBilag){ $("pf").dataset.okNoBilag="1"; return err("Ingen bilag lagt ved. Trykk «Lagre postering» igjen for å lagre likevel, og legg til bilaget senere."); }
+    $("fSave").disabled=true; $("fSave").textContent= files.length? "Laster opp bilag …":"Lagrer …";
+    try{
+      const bilag = await uploadFiles(files);
+      const aar = +dato.slice(0,4);
+      let nr = nextNr(aar), id;
+      for(;;){ id=`${aar}-${String(nr).padStart(4,"0")}`; const snap=await db.doc("posteringer/"+id).get(); if(!snap.exists) break; nr++; }
+      const row={nr, aar, dato, type, belop:Math.round(belop*100)/100, beskrivelse:besk, kategori:$("fKat").value,
+        arrangement:$("fArr2").value||"", konto:$("fKonto").value, notat:$("fNotat").value.trim(), bilag, opprettet:new Date().toISOString()};
+      if (pre?.korrFra) row.notat = (row.notat?row.notat+" · ":"") + `Erstatter bilag #${pre.korrFra}`;
+      await db.doc("posteringer/"+id).set(row);
+      if (!S.hasSettings) await saveSettings({});
+      closeModal(); toast(`Postering #${nr} lagret`);
+      if (aar!==S.year){ S.year=aar; render(); }
+    }catch(ex){ $("fSave").disabled=false; $("fSave").textContent="Lagre postering"; err(ex.__upload ? ex.message : writeErr(ex)); }
+  };
+  setTimeout(()=>$("fBelop").focus(),50);
+}
+async function uploadFiles(files){
+  const out=[];
+  for (const f of files){
+    try{ const r = await assets.upload(f); out.push({id:r.id, navn:f.name, type:r.contentType}); }
+    catch(e){
+      const m = e?.code==="unsupported_type" ? `«${f.name}» har et filformat som ikke støttes. Bruk JPG, PNG eller PDF.` :
+        e?.code==="too_large" || /large|size/i.test(e?.message||"") ? `«${f.name}» er for stor (maks 20 MB).` :
+        `Kunne ikke laste opp «${f.name}»: ${e?.message||"ukjent feil"}`;
+      const er=new Error(m); er.__upload=true; throw er;
+    }
+  }
+  return out;
+}
+
+/* ---------- Detalj og korrigering ---------- */
+function openDetail(id){
+  const r = S.rows.find(x=>x.id===id); if(!r) return;
+  const thumbs = (r.bilag||[]).map(b=>{
+    const img = /^image\//.test(b.type||"");
+    return `<a href="#" data-fid="${esc(b.id)}" data-img="${img?1:""}"><span class="t">${img?"…":"PDF"}</span>${esc(b.navn||"Bilag")}</a>`;
+  }).join("");
+  modal(`
+    <div class="section-head"><h2>Bilag #${r.nr} · ${r.aar}</h2><span class="chip ${r.type}">${r.type==="inn"?"Inntekt":"Utgift"}</span></div>
+    ${r.korrigertAv?`<div class="notice">Denne posteringen er korrigert av bilag #${r.korrigertAv}. Den teller fortsatt i kasseboka, men motposteringen nuller den ut.</div>`:""}
+    <dl>
+      <dt>Beløp</dt><dd class="num ${r.type==="inn"?"amt-inn":"amt-ut"}">${kr(r.belop)} kr</dd>
+      <dt>Dato</dt><dd class="num">${fmtDate(r.dato)}</dd>
+      <dt>Beskrivelse</dt><dd>${esc(r.beskrivelse)}</dd>
+      <dt>Kategori</dt><dd>${esc(r.kategori)}</dd>
+      <dt>Arrangement</dt><dd>${esc(r.arrangement||"Ingen")}</dd>
+      <dt>Betalt via</dt><dd>${r.konto==="kontant"?"Kontanter":"Bankkonto"}</dd>
+      ${r.notat?`<dt>Notat</dt><dd>${esc(r.notat)}</dd>`:""}
+      <dt>Registrert</dt><dd class="num">${r.opprettet?new Date(r.opprettet).toLocaleString("nb-NO"):""}</dd>
+    </dl>
+    <div class="section"><h3>Bilag</h3>${thumbs?`<div class="thumbs">${thumbs}</div>`:`<span class="hint">${r.korrigerer?"Motpostering, bilaget er det opprinnelige bilaget #"+r.korrigerer+".":"Ingen bilag lagt ved ennå."}</span>`}
+      ${canWrite && assets && !r.korrigerer?`<div class="field"><label for="addBilag">Legg til bilag</label><input id="addBilag" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" multiple></div>`:""}
+    </div>
+    <div id="dMsg" class="notice warn" hidden></div>
+    <div id="korrBox" hidden class="panel pad section">
+      <h3>Korriger bilag #${r.nr}</h3>
+      <p class="hint">Det lages en motpostering som nuller ut #${r.nr}. Begge blir stående i kasseboka. Etterpå kan du føre den riktige posteringen.</p>
+      <div class="field"><label for="korrGrunn">Hva var feil?</label><input id="korrGrunn" placeholder="F.eks. feil beløp, skulle vært 1 450,00"></div>
+      <div class="actions"><button class="btn" id="korrNo">Avbryt</button><button class="btn danger" id="korrYes">Lag motpostering</button></div>
+    </div>
+    <div class="actions">
+      ${canWrite && !r.korrigertAv && !r.korrigerer?`<button class="btn danger" id="korr">Korriger</button>`:""}
+      <button class="btn primary" id="dClose">Lukk</button>
+    </div>`);
+  $("dClose").onclick=closeModal;
+  document.querySelectorAll("[data-fid]").forEach(async a=>{
+    a.onclick=async e=>{ e.preventDefault(); const w=window.open("","_blank"); try{ const u=await fileUrl(a.dataset.fid); if(w) w.location=u; else location.href=u; }catch(ex){ if(w) w.close(); toast("Kunne ikke åpne bilaget."); } };
+    if (a.dataset.img){ try{ const u=await fileUrl(a.dataset.fid); a.querySelector(".t").innerHTML=`<img src="${u}" alt="">`; }catch(ex){ a.querySelector(".t").textContent="Feil"; } }
+  });
+  if ($("addBilag")) $("addBilag").onchange=async e=>{
+    const files=[...e.target.files]; if(!files.length) return;
+    try{ const nb=await uploadFiles(files); await db.doc("posteringer/"+r.id).update({bilag:[...(r.bilag||[]),...nb]}); toast("Bilag lagt til"); closeModal(); openDetail(r.id); }
+    catch(ex){ $("dMsg").textContent = ex.__upload?ex.message:writeErr(ex); $("dMsg").hidden=false; }
+  };
+  if ($("korr")) $("korr").onclick=()=>{ $("korrBox").hidden=false; $("korr").hidden=true; $("korrGrunn").focus(); };
+  if ($("korrNo")) $("korrNo").onclick=()=>{ $("korrBox").hidden=true; $("korr").hidden=false; };
+  if ($("korrYes")) $("korrYes").onclick=async()=>{
+    const grunn=$("korrGrunn").value.trim();
+    if(!grunn){ $("dMsg").textContent="Skriv kort hva som var feil, så revisor forstår korreksjonen."; $("dMsg").hidden=false; return; }
+    $("korrYes").disabled=true;
+    try{
+      const aar=r.aar; let nr=nextNr(aar), id;
+      for(;;){ id=`${aar}-${String(nr).padStart(4,"0")}`; const s=await db.doc("posteringer/"+id).get(); if(!s.exists) break; nr++; }
+      await db.doc("posteringer/"+id).set({nr, aar, dato: aar===new Date().getFullYear()?today():r.dato, type:r.type, belop:-r.belop,
+        beskrivelse:`Korreksjon av #${r.nr}: ${grunn}`, kategori:r.kategori, arrangement:r.arrangement||"", konto:r.konto||"bank",
+        notat:`Motpostering av «${r.beskrivelse}»`, bilag:[], korrigerer:r.nr, opprettet:new Date().toISOString()});
+      await db.doc("posteringer/"+r.id).update({korrigertAv:nr});
+      toast(`Motpostering #${nr} laget`);
+      openForm({type:r.type, dato:r.dato, belop:r.belop, beskrivelse:r.beskrivelse, kategori:r.kategori, arrangement:r.arrangement, konto:r.konto, korrFra:r.nr});
+    }catch(ex){ $("korrYes").disabled=false; $("dMsg").textContent=writeErr(ex); $("dMsg").hidden=false; }
+  };
+}
+
+/* ---------- Eksport ---------- */
+async function save(filename, data){
+  if (!downloads) return toast("Nedlasting er ikke tilgjengelig i denne visningen.");
+  try{ const r = await downloads.save({filename, data}); if (r?.status==="saved") toast("Fil lagret"); }
+  catch(e){ if (e?.code!=="declined" && e?.code!=="cancelled") toast("Kunne ikke laste ned: "+(e?.message||e?.code||"ukjent feil")); }
+}
+function downloadCsv(){
+  const n = v => String(Math.round(v*100)/100).replace(".",",");
+  const q = s => `"${String(s??"").replace(/"/g,'""')}"`;
+  const head = ["Bilagsnr","Dato","Type","Beløp","Beskrivelse","Kategori","Arrangement","Konto","Korrigerer bilag","Korrigert av bilag","Antall bilagsfiler","Notat"];
+  const rows = [...yearRows()].sort((a,b)=>a.nr-b.nr).map(r=>[r.nr, fmtDate(r.dato), r.type==="inn"?"Inntekt":"Utgift", n(signed(r)), q(r.beskrivelse), q(r.kategori), q(r.arrangement), r.konto==="kontant"?"Kontant":"Bank", r.korrigerer||"", r.korrigertAv||"", (r.bilag||[]).length, q(r.notat)].join(";"));
+  save(`kassebok-${S.year}.csv`, "﻿"+[head.join(";"),...rows].join("\r\n"));
+}
+function downloadReport(open){
+  const d = reportData();
+  const arrs = S.settings.arrangementer.map(a=>[a,arrStats(a)]).filter(([,x])=>x.rows.length);
+  const ledger = [...d.rows].sort((a,b)=>a.nr-b.nr).map(r=>`<tr><td>${r.nr}</td><td>${fmtDate(r.dato)}</td><td>${esc(r.beskrivelse)}${r.korrigerer?` <i>(korr. #${r.korrigerer})</i>`:""}</td><td>${esc(r.kategori)}</td><td class="r">${kr(signed(r))}</td><td>${(r.bilag||[]).length||(r.korrigerer?"–":"MANGLER")}</td></tr>`).join("");
+  const diff = d.avst!=null ? Math.round((d.avst-d.ubBank)*100)/100 : null;
+  const html = `<!doctype html><html lang="nb"><head><meta charset="utf-8"><title>Årsregnskap ${S.year} – ${esc(S.settings.navn)}</title>
+<style>body{font-family:"IBM Plex Sans",Arial,sans-serif;color:#111;max-width:780px;margin:32px auto;padding:0 20px;font-size:13px;line-height:1.45}
+h1{font-size:22px;margin:0}h2{font-size:15px;margin:28px 0 8px;border-bottom:1px solid #999;padding-bottom:4px}
+table{width:100%;border-collapse:collapse}td,th{padding:5px 6px;border-bottom:1px solid #ddd;text-align:left;vertical-align:top}th{font-size:11px;text-transform:uppercase;color:#555}
+.r{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}tr.sum td{font-weight:700;border-top:2px solid #111}tr.grp td{background:#f0f0f0;font-weight:600}
+.sig{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:60px}.sig div{border-top:1px solid #111;padding-top:4px}
+.muted{color:#666}@media print{body{margin:0}h2{break-after:avoid}}</style></head><body>
+<h1>Årsregnskap ${S.year}</h1><div class="muted">${esc(S.settings.navn)}${S.settings.orgnr?` · Org.nr. ${esc(S.settings.orgnr)}`:""} · Regnskapsperiode 01.01.${S.year}–31.12.${S.year}</div>
+<h2>Resultatregnskap</h2>${resultTable(d,true)}
+<h2>Beholdning og kontantbevegelse</h2>${balanceTable(d)}
+${d.avst!=null?`<p>Saldo bank per kontoutskrift 31.12.${S.year}: <b>${kr(d.avst)}</b>. ${diff===0?"Stemmer med regnskapet.":`Avvik mot regnskapet: <b>${kr(diff)}</b>.`}</p>`:`<p class="muted">Banksaldo per kontoutskrift 31.12. er ikke avstemt i systemet.</p>`}
+${arrs.length?`<h2>Arrangementer</h2><table><thead><tr><th>Arrangement</th><th class="r">Inntekter</th><th class="r">Kostnader</th><th class="r">Netto</th></tr></thead><tbody>${arrs.map(([a,x])=>`<tr><td>${esc(a)}</td><td class="r">${kr(x.inn)}</td><td class="r">${kr(x.ut)}</td><td class="r">${kr(x.res)}</td></tr>`).join("")}</tbody></table>`:""}
+<h2>Vedlegg: Kassebok ${S.year}</h2><table><thead><tr><th>Bilag</th><th>Dato</th><th>Beskrivelse</th><th>Kategori</th><th class="r">Beløp</th><th>Bilagsfiler</th></tr></thead><tbody>${ledger||`<tr><td colspan="6">Ingen posteringer</td></tr>`}</tbody></table>
+<div class="sig"><div>Kasserer, dato</div><div>Leder, dato</div></div>
+<p class="muted" style="margin-top:30px">Utskrevet ${new Date().toLocaleDateString("nb-NO")}. Åpne filen i nettleseren og velg Skriv ut → Lagre som PDF.</p>
+</body></html>`;
+  if (open){ const w=window.open(URL.createObjectURL(new Blob([html],{type:"text/html"})),"_blank"); if(!w) toast("Tillat popup-vinduer for å åpne rapporten."); return; }
+  save(`arsregnskap-${S.year}.html`, html);
+}
+
+/* ---------- Firebase ---------- */
+const firebaseConfig = {
+  apiKey: "AIzaSyCjmGSAINbM4YTm1ODSWpX83WJbN1xNWbc",
+  authDomain: "nffr-regnskap.firebaseapp.com",
+  projectId: "nffr-regnskap",
+  storageBucket: "nffr-regnskap.firebasestorage.app",
+  messagingSenderId: "977451437111",
+  appId: "1:977451437111:web:9b8bb55ce1ac42a20e43b2"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+db = firebase.firestore();
+const CHUNK = 700000; // tegn base64 per bit, under Firestores grense på 1 MB per dokument
+const MAX_BYTES = 8*1024*1024;
+const urlCache = {};
+
+async function shrinkImage(file){
+  if (!/^image\/(jpeg|png|webp)$/.test(file.type) || file.size < 400*1024) return file;
+  try{
+    const bmp = await createImageBitmap(file);
+    const scale = Math.min(1, 2000/Math.max(bmp.width,bmp.height));
+    const c = document.createElement("canvas"); c.width=Math.round(bmp.width*scale); c.height=Math.round(bmp.height*scale);
+    c.getContext("2d").drawImage(bmp,0,0,c.width,c.height);
+    const blob = await new Promise(r=>c.toBlob(r,"image/jpeg",0.82));
+    return blob && blob.size < file.size ? new File([blob], file.name.replace(/\.\w+$/,"")+".jpg", {type:"image/jpeg"}) : file;
+  }catch(e){ return file; }
+}
+function toB64(blob){ return new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(String(fr.result).split(",")[1]); fr.onerror=rej; fr.readAsDataURL(blob); }); }
+assets = {
+  async upload(file){
+    if (!/^(image\/(jpeg|png|webp)|application\/pdf)$/.test(file.type)) throw {code:"unsupported_type"};
+    const f = await shrinkImage(file);
+    if (f.size > MAX_BYTES) throw {code:"too_large", message:"for stor"};
+    const b64 = await toB64(f);
+    const ref = db.collection("filer").doc();
+    const n = Math.ceil(b64.length/CHUNK);
+    for (let i=0;i<n;i++) await ref.collection("biter").doc(String(i).padStart(3,"0")).set({d:b64.slice(i*CHUNK,(i+1)*CHUNK)});
+    await ref.set({navn:f.name, type:f.type, storrelse:f.size, biter:n, lastetOpp:new Date().toISOString()});
+    return {id:ref.id, contentType:f.type};
+  }
+};
+async function fileUrl(id){
+  if (urlCache[id]) return urlCache[id];
+  const meta = (await db.doc("filer/"+id).get()).data();
+  if (!meta) throw new Error("mangler");
+  const parts = (await db.collection("filer/"+id+"/biter").get()).docs.sort((a,b)=>a.id.localeCompare(b.id)).map(d=>d.data().d).join("");
+  const bin = atob(parts), arr = new Uint8Array(bin.length);
+  for (let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
+  return urlCache[id] = URL.createObjectURL(new Blob([arr],{type:meta.type}));
+}
+downloads = {
+  async save({filename, data}){
+    const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([data])); a.download=filename;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+    return {status:"saved"};
+  }
+};
+
+/* ---------- Innlogging ---------- */
+const loginMsg = m => { $("lErr").textContent=m; $("lErr").hidden=!m; };
+$("loginForm").onsubmit = async e=>{
+  e.preventDefault(); loginMsg("");
+  const email=$("lEmail").value.trim(), pass=$("lPass").value;
+  if (!email || !pass) return loginMsg("Fyll inn e-post og passord.");
+  $("lBtn").disabled=true;
+  try{ await auth.signInWithEmailAndPassword(email, pass); }
+  catch(ex){
+    loginMsg(/invalid|wrong|not-found|credential/.test(ex.code||"") ? "Feil e-post eller passord." :
+      ex.code==="auth/too-many-requests" ? "For mange forsøk. Vent litt og prøv igjen." : "Kunne ikke logge inn: "+(ex.message||ex.code));
+  }
+  $("lBtn").disabled=false;
+};
+$("lReset").onclick = async ()=>{
+  const email=$("lEmail").value.trim();
+  if (!email) return loginMsg("Skriv inn e-postadressen først.");
+  try{ await auth.sendPasswordResetEmail(email); loginMsg("Hvis adressen har tilgang, er det sendt en lenke for nytt passord."); }
+  catch(ex){ loginMsg("Hvis adressen har tilgang, er det sendt en lenke for nytt passord."); }
+};
+$("logout").onclick = ()=>auth.signOut();
+
+let unsubs = [];
+auth.onAuthStateChanged(user=>{
+  unsubs.forEach(u=>u()); unsubs=[];
+  $("login").hidden = !!user; $("app").hidden = !user;
+  if (!user){ S.loaded=false; S.rows=[]; closeModal(); return; }
+  render();
+  let gotS=false, gotR=false;
+  const ready=()=>{ if(gotS&&gotR){ S.loaded=true; render(); } };
+  const denied = e => { $("main").innerHTML=`<div class="panel empty"><strong>Ingen tilgang</strong><span>${e.code==="permission-denied"?"Denne kontoen har ikke tilgang til regnskapet.":esc(e.message)}</span><button class="btn" onclick="firebase.auth().signOut()">Logg ut</button></div>`; };
+  unsubs.push(db.doc("regnskap/innstillinger").onSnapshot(snap=>{
+    const d = snap.data();
+    if (d){ S.settings = {...structuredClone(DEFAULTS), ...d, kategorier:{...DEFAULTS.kategorier, ...(d.kategorier||{})}}; S.hasSettings=true; }
+    gotS=true; if(S.loaded) render(); else ready();
+  }, denied));
+  unsubs.push(db.collection("posteringer").onSnapshot(snap=>{
+    S.rows = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    gotR=true; if(S.loaded && !$("modal").innerHTML) render(); else if(S.loaded) renderChrome(); else ready();
+  }, denied));
+});
+})();
+</script>
+</body>
+</html>
