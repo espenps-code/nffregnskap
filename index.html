@@ -346,7 +346,7 @@ const parseAmt = s => { const v = Number(String(s).replace(/\s|kr/gi,"").replace
 const $ = id => document.getElementById(id);
 
 const S = { settings: structuredClone(DEFAULTS), hasSettings:false, rows: [], loaded:false,
-  year: new Date().getFullYear(), tab: "oversikt", q:"", fKat:"", fArr:"", fBilag:"" };
+  year: new Date().getFullYear(), tab: "oversikt", q:"", fKat:"", fArr:"", fBilag:"", editArr:null };
 let db=null, assets=null, downloads=null, canWrite=true;
 
 try { const t = localStorage.getItem("kb-tab"); if (t && TABS.some(x=>x[0]===t)) S.tab=t; } catch(e){}
@@ -498,7 +498,7 @@ function vKassebok(){
     <div class="filters">
       <input id="q" type="search" placeholder="Søk i beskrivelse, beløp, bilagsnr" value="${esc(S.q)}">
       <select id="fKat"><option value="">Alle kategorier</option>${kats.map(k=>`<option ${S.fKat===k?"selected":""}>${esc(k)}</option>`).join("")}</select>
-      <select id="fArr"><option value="">Alle arrangementer</option><option value="__ingen" ${S.fArr==="__ingen"?"selected":""}>Uten arrangement</option>${S.settings.arrangementer.map(a=>`<option ${S.fArr===a?"selected":""}>${esc(a)}</option>`).join("")}</select>
+      <select id="fArr"><option value="">Alle arrangementer</option><option value="__ingen" ${S.fArr==="__ingen"?"selected":""}>Uten arrangement</option>${arrFor(S.year, S.fArr).map(a=>`<option ${S.fArr===a?"selected":""}>${esc(a)}</option>`).join("")}</select>
       <select id="fBilag"><option value="">Alle</option><option value="mangler" ${S.fBilag==="mangler"?"selected":""}>Mangler bilag</option></select>
     </div>
     <div class="panel">${all.length ? (rows.length ? ledgerRows(rows) : `<div class="empty">Ingen posteringer passer filteret.</div>`) : emptyLedger()}</div>
@@ -541,23 +541,75 @@ function arrStats(name){
   const rows = yearRows().filter(r=>r.arrangement===name); const s=sums(rows);
   return {rows, ...s};
 }
+// Hvilket regnskapsår et arrangement hører til: lagret år, ellers året for første postering, ellers årstall i navnet.
+function arrYear(a){
+  const m = S.settings.arrAar?.[a]; if (m) return +m;
+  const ys = S.rows.filter(r=>r.arrangement===a).map(r=>r.aar);
+  if (ys.length) return Math.min(...ys);
+  const t = String(a).match(/\b(19|20)\d{2}\b/); return t ? +t[0] : null;
+}
+// Arrangementer som skal vises for et år: hører til året, har posteringer i året, eller er allerede valgt.
+function arrFor(y, keep){
+  return S.settings.arrangementer.filter(a => a===keep || arrYear(a)===y || arrYear(a)==null || S.rows.some(r=>r.aar===y && r.arrangement===a));
+}
+function refreshArrOpts(){
+  const sel=$("fArr2"), d=$("fDato"); if(!sel||!d) return;
+  const y=+String(d.value).slice(0,4)||S.year, cur=sel.value;
+  sel.innerHTML = `<option value="">Ingen</option>` + arrFor(y, cur).map(a=>`<option ${cur===a?"selected":""}>${esc(a)}</option>`).join("");
+}
+window.refreshArrOpts = refreshArrOpts;
+async function saveArrEdit(old){
+  const navn=$("eaNavn").value.trim(), aar=+$("eaAar").value;
+  if (!navn) return toast("Arrangementet må ha et navn.");
+  if (!(aar>=1990 && aar<=2100)) return toast("Skriv et gyldig år, f.eks. 2026.");
+  if (navn!==old && S.settings.arrangementer.includes(navn)) return toast("Det finnes allerede et arrangement med det navnet.");
+  if (!db) return toast("Lagring er ikke tilgjengelig her.");
+  const brukt = S.rows.filter(r=>r.arrangement===old);
+  $("eaYes").disabled=true;
+  try {
+    if (navn!==old && brukt.length){
+      const tid=new Date().toISOString();
+      for (let i=0;i<brukt.length;i+=400){
+        const b=db.batch();
+        for (const r of brukt.slice(i,i+400)) b.update(db.doc("posteringer/"+r.id), {arrangement:navn,
+          endringer:[...(r.endringer||[]), {tid, tekst:`Arrangement omdøpt fra «${old}» til «${navn}»`}]});
+        await b.commit();
+      }
+    }
+    const arrAar={...(S.settings.arrAar||{})}; delete arrAar[old]; arrAar[navn]=aar;
+    await saveSettings({arrangementer:S.settings.arrangementer.map(a=>a===old?navn:a), arrAar});
+    if (S.fArr===old) S.fArr=navn;
+    S.editArr=null; render();
+    const vises = aar===S.year || S.rows.some(r=>r.aar===S.year && r.arrangement===navn);
+    toast(vises ? `Arrangementet er lagret${brukt.length&&navn!==old?`, ${brukt.length} posteringer oppdatert`:""}.` : `«${navn}» er flyttet til ${aar}. Bytt regnskapsår øverst for å se det.`);
+  } catch(e){ if($("eaYes")) $("eaYes").disabled=false; toast(writeErr(e)); }
+}
 function vArr(){
-  const list = S.settings.arrangementer;
+  const list = arrFor(S.year);
   const cards = list.map(a=>{
     const st = arrStats(a);
+    if (S.editArr===a) return `<div class="panel pad arr">
+      <h3>Rediger arrangement</h3>
+      <div class="formgrid">
+        <div class="field full"><label for="eaNavn">Navn</label><input id="eaNavn" value="${esc(a)}"></div>
+        <div class="field"><label for="eaAar">Regnskapsår</label><input id="eaAar" type="number" inputmode="numeric" min="1990" max="2100" value="${arrYear(a)??S.year}"></div>
+      </div>
+      ${st.rows.length||S.rows.some(r=>r.arrangement===a)?`<p class="hint">Endrer du navnet, oppdateres alle ${S.rows.filter(r=>r.arrangement===a).length} posteringer som er knyttet til arrangementet. Endringen lagres i historikken til hver postering.</p>`:""}
+      <div class="actions"><button class="btn" id="eaNo">Avbryt</button><button class="btn primary" id="eaYes">Lagre</button></div>
+    </div>`;
     const kats = Object.entries(st.byKat).sort((x,y)=>x[0].localeCompare(y[0]));
     return `<div class="panel pad arr">
       <div class="head"><h3>${esc(a)}</h3><span class="chip ${st.res>=0?"inn":"ut"}">${st.res>=0?"Overskudd":"Underskudd"} <span class="num">${kr(st.res)}</span></span></div>
       <div class="nums"><span>Inntekter<b class="amt-inn">${kr(st.inn)}</b></span><span>Utgifter<b class="amt-ut">${kr(st.ut)}</b></span><span>Posteringer<b>${st.rows.length}</b></span></div>
       ${kats.length?`<table class="rtable"><tbody>${kats.map(([k,v])=>`<tr><td>${esc(k.split("|")[1])}</td><td class="r num ${k.startsWith("inn")?"amt-inn":"amt-ut"}">${k.startsWith("inn")?"+":"−"} ${kr(v)}</td></tr>`).join("")}</tbody></table>`:`<span class="hint">Ingen posteringer knyttet til dette arrangementet i ${S.year}.</span>`}
-      ${st.rows.length?`<div><button class="btn small" data-go="kassebok" data-farr="${esc(a)}">Vis posteringene</button></div>`:""}
+      ${st.rows.length||canWrite?`<div class="addrow" style="align-items:flex-start;align-self:end">${st.rows.length?`<button class="btn small" data-go="kassebok" data-farr="${esc(a)}">Vis posteringene</button>`:""}${canWrite?`<button class="btn small" data-editarr="${esc(a)}">Rediger</button>`:""}</div>`:""}
     </div>`;
   }).join("");
   return `<section class="section">
     <div class="section-head"><h2>Regnskap per arrangement ${S.year}</h2></div>
     <p class="hint">Knytt en postering til et arrangement når du fører den, så samles inntekter og kostnader her. Nyttig når dere skal rapportere tilbake til de som ga tilskudd.</p>
-    <div class="grid2">${cards || `<div class="panel empty">Ingen arrangementer ennå.</div>`}</div>
-    ${canWrite?`<div class="panel pad"><div class="field"><label for="newArr">Legg til arrangement</label><div class="addrow"><input id="newArr" placeholder="F.eks. Juleavslutning 2026"><button class="btn" id="addArr">Legg til</button></div></div></div>`:""}
+    <div class="grid2">${cards || `<div class="panel empty">Ingen arrangementer i ${S.year} ennå.</div>`}</div>
+    ${canWrite?`<div class="panel pad"><div class="field"><label for="newArr">Legg til arrangement</label><div class="addrow"><input id="newArr" placeholder="F.eks. Juleavslutning ${S.year}"><button class="btn" id="addArr">Legg til</button></div></div></div>`:""}
   </section>`;
 }
 
@@ -650,8 +702,8 @@ function vInnst(){
       <div class="panel pad section"><h3>Inntektskategorier</h3>${katList("inn")}</div>
       <div class="panel pad section"><h3>Utgiftskategorier</h3>${katList("ut")}</div>
     </div>
-    <div class="panel pad section"><h3>Arrangementer</h3>
-      <div class="listedit">${st.arrangementer.map((a,i)=>`<div class="li"><span>${esc(a)}</span>${canWrite && !usedArr.has(a)?`<button class="btn small" data-rmarr="${i}">Fjern</button>`:`<span class="chip">I bruk</span>`}</div>`).join("")}</div>
+    <div class="panel pad section"><h3>Arrangementer ${S.year}</h3>
+      <div class="listedit">${arrFor(S.year).map(a=>{ const i=st.arrangementer.indexOf(a); return `<div class="li"><span>${esc(a)}</span><span class="addrow" style="align-items:center">${canWrite?`<button class="btn small" data-editarr2="${esc(a)}">Rediger</button>`:""}${canWrite && !usedArr.has(a)?`<button class="btn small" data-rmarr="${i}">Fjern</button>`:`<span class="chip">I bruk</span>`}</span></div>`; }).join("") || `<span class="hint">Ingen arrangementer i ${S.year}.</span>`}</div>
     </div>
     <p class="hint">Kategorier og arrangementer som er brukt i en postering kan ikke fjernes, slik at gamle bilag fortsatt henger sammen.</p>
     ${canWrite?`<div class="panel pad section"><h3>Importer et år fra fil</h3>
@@ -690,8 +742,13 @@ function bindView(){
   if (S.tab==="arrangementer" && $("addArr")) $("addArr").onclick=()=>{
     const v=$("newArr").value.trim(); if(!v) return;
     if (S.settings.arrangementer.includes(v)) return toast("Det arrangementet finnes allerede.");
-    saveSettings({arrangementer:[...S.settings.arrangementer, v]}).then(render);
+    saveSettings({arrangementer:[...S.settings.arrangementer, v], arrAar:{...(S.settings.arrAar||{}), [v]:S.year}}).then(render);
   };
+  if (S.tab==="arrangementer"){
+    $("main").querySelectorAll("[data-editarr]").forEach(b=>b.onclick=()=>{ S.editArr=b.dataset.editarr; render(); const n=$("eaNavn"); if(n){n.focus(); n.select();} });
+    if ($("eaNo")) $("eaNo").onclick=()=>{ S.editArr=null; render(); };
+    if ($("eaYes")) $("eaYes").onclick=()=>saveArrEdit(S.editArr);
+  }
   if (S.tab==="rapport"){
     $("main").querySelectorAll("[data-doc]").forEach(b=>b.onclick=()=>{
       const x=(S.settings.dokumenter?.[S.year]||[]).find(z=>z.id===b.dataset.doc); if(x) openStored(x.id, x.navn, x.type);
@@ -759,11 +816,12 @@ function bindView(){
       const arr=[...S.settings.arrangementer]; arr.splice(+b.dataset.rmarr,1);
       saveSettings({arrangementer:arr}).then(render);
     });
+    $("main").querySelectorAll("[data-editarr2]").forEach(b=>b.onclick=()=>{ S.editArr=b.dataset.editarr2; setTab("arrangementer"); const n=$("eaNavn"); if(n){n.focus(); n.select();} });
   }
 }
 function setTab(t){ S.tab=t; try{localStorage.setItem("kb-tab",t);}catch(e){} render(); window.scrollTo(0,0); }
 $("tabs").addEventListener("click",e=>{ const b=e.target.closest("[data-tab]"); if(b) setTab(b.dataset.tab); });
-$("year").onchange=e=>{ S.year=+e.target.value; render(); };
+$("year").onchange=e=>{ S.year=+e.target.value; S.editArr=null; render(); };
 $("fab").onclick=()=>openForm();
 
 /* ---------- Skjema: ny postering ---------- */
@@ -794,11 +852,11 @@ function openForm(pre){
       <button type="button" class="ut" data-t="ut" aria-pressed="${type==="ut"}">Utgift</button>
     </div>
     <form id="pf" class="formgrid" novalidate>
-      <div class="field"><label for="fDato">Dato</label><input id="fDato" type="date" value="${esc(p.dato)}" required></div>
+      <div class="field"><label for="fDato">Dato</label><input id="fDato" type="date" value="${esc(p.dato)}" onchange="refreshArrOpts()" required></div>
       <div class="field"><label for="fBelop">Beløp (kr)</label><input id="fBelop" inputmode="decimal" placeholder="0,00" value="${p.belop?kr(p.belop):""}" required></div>
       <div class="field full"><label for="fBesk">Beskrivelse</label><input id="fBesk" placeholder="F.eks. Leie av Stemnestaden, faktura 1042" value="${esc(p.beskrivelse||"")}" required></div>
       <div class="field"><label for="fKat">Kategori</label><select id="fKat">${katOpts(type)}</select></div>
-      <div class="field"><label for="fArr2">Arrangement</label><select id="fArr2"><option value="">Ingen</option>${S.settings.arrangementer.map(a=>`<option ${p.arrangement===a?"selected":""}>${esc(a)}</option>`).join("")}</select></div>
+      <div class="field"><label for="fArr2">Arrangement</label><select id="fArr2"><option value="">Ingen</option>${arrFor(+String(p.dato||"").slice(0,4)||S.year, p.arrangement).map(a=>`<option ${p.arrangement===a?"selected":""}>${esc(a)}</option>`).join("")}</select></div>
       <div class="field"><label for="fKonto">Betalt via</label><select id="fKonto"><option value="bank" ${!p.konto||p.konto==="bank"?"selected":""}>Bankkonto</option><option value="kontant" ${p.konto==="kontant"?"selected":""}>Kontanter</option><option value="gjeld" ${p.konto==="gjeld"?"selected":""}>Ikke betalt ennå (settes av som gjeld)</option></select></div>
       <div class="field"><label for="fFiler">Bilag (kvittering, faktura)</label><input id="fFiler" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" multiple ${assets?"":"disabled"}></div>
       <label class="full" style="display:flex;gap:8px;align-items:center;font-size:.9rem"><input type="checkbox" id="fArkiv" ${p.bilagArkiv?"checked":""}> Bilaget oppbevares på papir eller i et annet arkiv</label>
@@ -894,7 +952,7 @@ function openDetail(id){
       <h3>Avklar bilag #${r.nr}</h3>
       <p class="hint">Beløp og dato endres ikke. Det lagres i historikken til posteringen at den var uavklart og hva den ble.</p>
       <div class="field"><label for="avkKat">Kategori</label><select id="avkKat">${valg}</select></div>
-      <div class="field"><label for="avkArr">Arrangement</label><select id="avkArr"><option value="">Ingen</option>${S.settings.arrangementer.map(a=>`<option ${r.arrangement===a?"selected":""}>${esc(a)}</option>`).join("")}</select></div>
+      <div class="field"><label for="avkArr">Arrangement</label><select id="avkArr"><option value="">Ingen</option>${arrFor(r.aar, r.arrangement).map(a=>`<option ${r.arrangement===a?"selected":""}>${esc(a)}</option>`).join("")}</select></div>
       <div class="field"><label for="avkBesk">Beskrivelse</label><input id="avkBesk" value="${esc(r.beskrivelse)}"></div>
       <div class="actions"><button class="btn" id="avkNo">Avbryt</button><button class="btn primary" id="avkYes">Lagre avklaring</button></div>
     </div>`; })() : ""}
@@ -1120,6 +1178,7 @@ async function startImport(file){
       const kat = {inn:[...new Set([...(d.kategorier?.inn||S.settings.kategorier.inn), ...brukt("inn")].filter(spes))],
                    ut:[...new Set([...(d.kategorier?.ut||S.settings.kategorier.ut), ...brukt("ut")].filter(spes))]};
       const patch = {kategorier:kat, arrangementer:[...new Set([...S.settings.arrangementer, ...(d.arrangementer||[])])],
+        arrAar:{...Object.fromEntries((d.arrangementer||[]).map(a=>[a,y])), ...(S.settings.arrAar||{})},
         saldo:{...(S.settings.saldo||{}), [y]:ib}};
       if (d.budsjett) patch.budsjett = {...(S.settings.budsjett||{}), [y]:d.budsjett};
       if (d.avstemt!=null) patch.avstemt = {...(S.settings.avstemt||{}), [y]:d.avstemt};
