@@ -232,6 +232,7 @@ const DEFAULTS = {
   dokumenter: {}
 };
 const GJELD_KAT = "Betaling av gjeld fra tidligere år";
+const UAVKLART = "Uavklart – må avklares";
 const nf = new Intl.NumberFormat("nb-NO",{minimumFractionDigits:2,maximumFractionDigits:2});
 const kr = n => nf.format(Math.round((n||0)*100)/100);
 const esc = s => String(s ?? "").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -321,6 +322,7 @@ function ledgerRows(rows, compact){
       r.konto==="kontant" ? `<span class="chip">Kontant</span>`:"",
       r.korrigerer ? `<span class="chip">Korrigerer #${r.korrigerer}</span>`:"",
       rev ? `<span class="chip">Korrigert av #${r.korrigertAv}</span>`:"",
+      r.kategori===UAVKLART ? `<span class="chip warn">Uavklart</span>`:"",
       r.kategori===GJELD_KAT ? `<span class="chip">Ikke kostnad i år</span>`:"",
       r.konto==="gjeld" ? `<span class="chip">Satt av, ikke betalt</span>`:"",
       r.belop<0 && !r.korrigerer && r.type==="ut" ? `<span class="chip inn">Refusjon/egenandel</span>`:"",
@@ -342,6 +344,7 @@ function vOversikt(){
   const rows = yearRows(), s = sums(rows), sal = saldo(S.year);
   const ib = (sal.bank||0)+(sal.kontant||0);
   const miss = missingBilag(rows);
+  const unk = rows.filter(r=>r.kategori===UAVKLART);
   const b = budsjett(S.year);
   const over = Object.entries(b).filter(([k,v])=>v>0 && (s.byKat[k]||0)>v && k.startsWith("ut|"));
   const latest = [...rows].sort((a,b)=>b.nr-a.nr).slice(0,5);
@@ -358,9 +361,10 @@ function vOversikt(){
     <div class="section-head"><h2>Trenger oppmerksomhet</h2></div>
     <div class="attn">
       ${!S.hasSettings || (S.settings.saldo?.[S.year]==null) ? `<div class="item"><span>Inngående saldo for ${S.year} er ikke lagt inn. Bruk saldoen på kontoutskriften per 1. januar.</span><button class="btn small" data-go="innstillinger">Legg inn</button></div>`:""}
+      ${unk.length ? `<div class="item"><span>${unk.length} postering${unk.length>1?"er":""} er uavklart. Beløpene i banken er riktige, men kategorien mangler.</span><button class="btn small" data-go="kassebok" data-fkat="${esc(UAVKLART)}">Vis</button></div>`:""}
       ${miss.length ? `<div class="item"><span>${miss.length} postering${miss.length>1?"er":""} mangler bilag. Revisor trenger kvittering eller faktura for hver.</span><button class="btn small" data-go="kassebok" data-fbilag="mangler">Vis</button></div>`:""}
       ${over.map(([k,v])=>`<div class="item"><span>${esc(k.split("|")[1])} er over budsjett: <span class="num">${kr(s.byKat[k])}</span> av <span class="num">${kr(v)}</span></span><button class="btn small" data-go="budsjett">Se budsjett</button></div>`).join("")}
-      ${(S.settings.saldo?.[S.year]!=null && !miss.length && !over.length) ? `<div class="ok">Alt ser ryddig ut for ${S.year}. Alle posteringer har bilag.</div>`:""}
+      ${(S.settings.saldo?.[S.year]!=null && !miss.length && !over.length && !unk.length) ? `<div class="ok">Alt ser ryddig ut for ${S.year}. Alle posteringer har bilag.</div>`:""}
     </div>
   </section>
   <section class="section">
@@ -384,7 +388,7 @@ function filteredRows(){
 }
 function vKassebok(){
   const all = yearRows(); const rows = filteredRows(); const s = sums(rows);
-  const kats = [...S.settings.kategorier.inn, ...S.settings.kategorier.ut, GJELD_KAT];
+  const kats = [...new Set([...S.settings.kategorier.inn, ...S.settings.kategorier.ut, GJELD_KAT, UAVKLART])];
   return `<section class="section">
     <div class="section-head"><h2>Kassebok ${S.year}</h2><span class="hint">${all.length} posteringer · ny får bilag #${nextNr(S.year)}</span></div>
     <div class="filters">
@@ -461,7 +465,7 @@ function reportData(){
   return {rows, s, b, ibBank, ibKont, ibGjeld, ubBank, ubKont, ubGjeld, avst};
 }
 function resultTable(d, forExport){
-  const line = (type) => S.settings.kategorier[type].map(k=>{
+  const line = (type) => [...S.settings.kategorier[type], UAVKLART].map(k=>{
     const key=type+"|"+k, v=d.s.byKat[key]||0, bud=d.b[key]||0;
     if (!v && !bud) return "";
     return `<tr><td>${esc(k)}</td><td class="r num">${kr(v)}</td><td class="r num">${kr(bud)}</td></tr>`;
@@ -559,7 +563,7 @@ function vInnst(){
 function bindView(){
   const m=$("main");
   m.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>{
-    S.fBilag = b.dataset.fbilag||""; S.fArr = b.dataset.farr||""; if (b.dataset.go==="kassebok"){S.fKat="";S.q="";}
+    S.fBilag = b.dataset.fbilag||""; S.fArr = b.dataset.farr||""; if (b.dataset.go==="kassebok"){S.fKat=b.dataset.fkat||"";S.q="";}
     setTab(b.dataset.go);
   });
   m.querySelectorAll("[data-new]").forEach(b=>b.onclick=()=>openForm());
@@ -675,8 +679,9 @@ function openForm(pre){
   const opt = (v,label,sel) => `<option value="${esc(v)}" ${sel?"selected":""}>${esc(label)}</option>`;
   const katOpts = t => {
     const main = S.settings.kategorier[t].map(k=>opt(k,k,p.kategori===k && !p.refKat)).join("");
-    if (t==="inn") return main + `<optgroup label="Refusjon eller egenandel (trekkes fra en kostnad)">${S.settings.kategorier.ut.map(k=>opt("ref|"+k,k,p.refKat===k)).join("")}</optgroup>`;
-    return main + `<optgroup label="Ikke en kostnad i år">${opt(GJELD_KAT,GJELD_KAT,p.kategori===GJELD_KAT)}</optgroup>`;
+    const vet = `<optgroup label="Vet ikke ennå">${opt(UAVKLART,UAVKLART,p.kategori===UAVKLART)}</optgroup>`;
+    if (t==="inn") return main + `<optgroup label="Refusjon eller egenandel (trekkes fra en kostnad)">${S.settings.kategorier.ut.map(k=>opt("ref|"+k,k,p.refKat===k)).join("")}</optgroup>` + vet;
+    return main + `<optgroup label="Ikke en kostnad i år">${opt(GJELD_KAT,GJELD_KAT,p.kategori===GJELD_KAT)}</optgroup>` + vet;
   };
   modal(`
     <h2>${pre?.korrFra?`Riktig postering etter korreksjon av #${pre.korrFra}`:"Ny postering"}</h2>
@@ -767,6 +772,7 @@ function openDetail(id){
       <dt>Arrangement</dt><dd>${esc(r.arrangement||"Ingen")}</dd>
       <dt>Betalt via</dt><dd>${r.konto==="kontant"?"Kontanter":r.konto==="gjeld"?"Ikke betalt ennå (satt av som gjeld)":"Bankkonto"}</dd>
       ${r.importert?`<dt>Kilde</dt><dd>${esc(r.importert)}</dd>`:""}
+      ${r.endringer?.length?`<dt>Endringer</dt><dd>${r.endringer.map(e=>esc(new Date(e.tid).toLocaleDateString("nb-NO")+": "+e.tekst)).join("<br>")}</dd>`:""}
       ${r.notat?`<dt>Notat</dt><dd>${esc(r.notat)}</dd>`:""}
       <dt>Registrert</dt><dd class="num">${r.opprettet?new Date(r.opprettet).toLocaleString("nb-NO"):""}</dd>
     </dl>
@@ -774,6 +780,20 @@ function openDetail(id){
       ${canWrite && assets && !r.korrigerer?`<div class="field"><label for="addBilag">Legg til bilag</label><input id="addBilag" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" multiple></div>`:""}
     </div>
     <div id="dMsg" class="notice warn" hidden></div>
+    ${r.kategori===UAVKLART && canWrite ? (()=>{
+      const innPenger = signed(r) > 0;
+      const o = (v,l) => `<option value="${esc(v)}">${esc(l)}</option>`;
+      const valg = innPenger
+        ? S.settings.kategorier.inn.map(k=>o(k,k)).join("") + `<optgroup label="Refusjon eller egenandel (trekkes fra en kostnad)">${S.settings.kategorier.ut.map(k=>o("ref|"+k,k)).join("")}</optgroup>`
+        : S.settings.kategorier.ut.map(k=>o(k,k)).join("") + `<optgroup label="Ikke en kostnad i år">${o(GJELD_KAT,GJELD_KAT)}</optgroup>`;
+      return `<div id="avkBox" hidden class="panel pad section">
+      <h3>Avklar bilag #${r.nr}</h3>
+      <p class="hint">Beløp og dato endres ikke. Det lagres i historikken til posteringen at den var uavklart og hva den ble.</p>
+      <div class="field"><label for="avkKat">Kategori</label><select id="avkKat">${valg}</select></div>
+      <div class="field"><label for="avkArr">Arrangement</label><select id="avkArr"><option value="">Ingen</option>${S.settings.arrangementer.map(a=>`<option ${r.arrangement===a?"selected":""}>${esc(a)}</option>`).join("")}</select></div>
+      <div class="field"><label for="avkBesk">Beskrivelse</label><input id="avkBesk" value="${esc(r.beskrivelse)}"></div>
+      <div class="actions"><button class="btn" id="avkNo">Avbryt</button><button class="btn primary" id="avkYes">Lagre avklaring</button></div>
+    </div>`; })() : ""}
     <div id="korrBox" hidden class="panel pad section">
       <h3>Korriger bilag #${r.nr}</h3>
       <p class="hint">Det lages en motpostering som nuller ut #${r.nr}. Begge blir stående i kasseboka. Etterpå kan du føre den riktige posteringen.</p>
@@ -781,6 +801,7 @@ function openDetail(id){
       <div class="actions"><button class="btn" id="korrNo">Avbryt</button><button class="btn danger" id="korrYes">Lag motpostering</button></div>
     </div>
     <div class="actions">
+      ${canWrite && r.kategori===UAVKLART?`<button class="btn" id="avk">Avklar</button>`:""}
       ${canWrite && !r.korrigertAv && !r.korrigerer?`<button class="btn danger" id="korr">Korriger</button>`:""}
       <button class="btn primary" id="dClose">Lukk</button>
     </div>`);
@@ -793,6 +814,21 @@ function openDetail(id){
     const files=[...e.target.files]; if(!files.length) return;
     try{ const nb=await uploadFiles(files); await db.doc("posteringer/"+r.id).update({bilag:[...(r.bilag||[]),...nb]}); toast("Bilag lagt til"); closeModal(); openDetail(r.id); }
     catch(ex){ $("dMsg").textContent = ex.__upload?ex.message:writeErr(ex); $("dMsg").hidden=false; }
+  };
+  if ($("avk")) $("avk").onclick=()=>{ $("avkBox").hidden=false; $("avk").hidden=true; $("avkKat").focus(); };
+  if ($("avkNo")) $("avkNo").onclick=()=>{ $("avkBox").hidden=true; $("avk").hidden=false; };
+  if ($("avkYes")) $("avkYes").onclick=async()=>{
+    let k=$("avkKat").value, type, belop=Math.abs(r.belop);
+    const innPenger = signed(r) > 0;
+    if (k.startsWith("ref|")){ k=k.slice(4); type="ut"; belop=-belop; }
+    else type = innPenger ? "inn" : "ut";
+    const besk=$("avkBesk").value.trim()||r.beskrivelse, arr=$("avkArr").value;
+    const endring={tid:new Date().toISOString(), tekst:`Avklart fra «${UAVKLART}» til «${k}»${type==="ut"&&belop<0?" (refusjon/egenandel)":""}${besk!==r.beskrivelse?`, beskrivelse var «${r.beskrivelse}»`:""}`};
+    $("avkYes").disabled=true;
+    try{
+      await db.doc("posteringer/"+r.id).update({kategori:k, type, belop, beskrivelse:besk, arrangement:arr, endringer:[...(r.endringer||[]), endring]});
+      toast(`Bilag #${r.nr} avklart`); closeModal();
+    }catch(ex){ $("avkYes").disabled=false; $("dMsg").textContent=writeErr(ex); $("dMsg").hidden=false; }
   };
   if ($("korr")) $("korr").onclick=()=>{ $("korrBox").hidden=false; $("korr").hidden=true; $("korrGrunn").focus(); };
   if ($("korrNo")) $("korrNo").onclick=()=>{ $("korrBox").hidden=true; $("korr").hidden=false; };
@@ -940,8 +976,9 @@ async function startImport(file){
       <dt>Kostnader</dt><dd class="num">${kr(s.ut)}</dd>
       <dt>Årsresultat</dt><dd class="num">${kr(s.res)}</dd>
       <dt>Bank 1. januar</dt><dd class="num">${kr(ib.bank)}</dd>
-      <dt>Bank 31. desember</dt><dd class="num">${kr(ubBank)}${d.avstemt!=null?(Math.abs(d.avstemt-ubBank)<0.005?" · stemmer med kontoutskrift":" · avvik mot kontoutskrift "+kr(d.avstemt-ubBank)):""}</dd>
-      <dt>Gjeld 31. desember</dt><dd class="num">${kr(ubGjeld)}</dd>
+      <dt>Bank etter siste postering</dt><dd class="num">${kr(ubBank)}${d.avstemt!=null?(Math.abs(d.avstemt-ubBank)<0.005?" · stemmer med kontoutskrift":" · avvik mot kontoutskrift "+kr(d.avstemt-ubBank)):""}${d.kontroll?(Math.abs(d.kontroll.belop-ubBank)<0.005?` · stemmer med ${esc(d.kontroll.tekst)}`:` · avvik mot ${esc(d.kontroll.tekst)}: ${kr(d.kontroll.belop-ubBank)}`):""}</dd>
+      <dt>Ubetalt gjeld</dt><dd class="num">${kr(ubGjeld)}</dd>
+      ${rows.some(r=>r.kategori===UAVKLART)?`<dt>Uavklart</dt><dd>${rows.filter(r=>r.kategori===UAVKLART).length} posteringer må få kategori senere</dd>`:""}
       <dt>Budsjett</dt><dd>${d.budsjett?Object.keys(d.budsjett).length+" poster":"Ingen"}</dd>
       <dt>Årsdokumenter</dt><dd>${(d.dokumenter||[]).map(x=>esc(x.navn)).join(", ")||"Ingen"}</dd>
     </dl>
@@ -974,8 +1011,9 @@ async function startImport(file){
       }
       msg("Oppdaterer innstillinger …");
       const brukt = t => S.rows.filter(r=>r.type===t && r.aar!==y).map(r=>r.kategori);
-      const kat = {inn:[...new Set([...(d.kategorier?.inn||S.settings.kategorier.inn), ...brukt("inn")])],
-                   ut:[...new Set([...(d.kategorier?.ut||S.settings.kategorier.ut), ...brukt("ut")].filter(k=>k!==GJELD_KAT))]};
+      const spes = k => k!==GJELD_KAT && k!==UAVKLART;
+      const kat = {inn:[...new Set([...(d.kategorier?.inn||S.settings.kategorier.inn), ...brukt("inn")].filter(spes))],
+                   ut:[...new Set([...(d.kategorier?.ut||S.settings.kategorier.ut), ...brukt("ut")].filter(spes))]};
       const patch = {kategorier:kat, arrangementer:[...new Set([...S.settings.arrangementer, ...(d.arrangementer||[])])],
         saldo:{...(S.settings.saldo||{}), [y]:ib}};
       if (d.budsjett) patch.budsjett = {...(S.settings.budsjett||{}), [y]:d.budsjett};
