@@ -222,14 +222,16 @@ const DEFAULTS = {
   navn: "Norsk Fosterhjemsforening Rogaland",
   orgnr: "",
   kategorier: {
-    inn: ["Medlemskontingent","Tilskudd og støtte","Deltakeravgift arrangement","Gaver","Renteinntekter","Andre inntekter"],
-    ut: ["Lokale og overnatting","Mat og servering","Foredragsholdere og honorar","Reise","Aktiviteter for barn","Kontor, porto og trykk","Bankgebyr","Gaver og oppmerksomhet","Andre utgifter"]
+    inn: ["Medlemskontingent refusjon/støtte NFF","Norsk Tipping (Grasrotandelen)","Kalendersalg","Kursinntekter / foredrag / aktiviteter","Diverse støtte","Diverse inntekter","Renteinntekter"],
+    ut: ["Familiesamling / aktiviteter","Fosterhjemskafe","Fosterhjemskonferansen","Organisasjonssamling","Landsmøte / Ledersamling","Årsmøte","Styremøte","Styrehonorar","Politisk påvirkning / møter","Kurs","Reise / diett / kjøring – lokalt","Kontorrekvisita div.","Div. blomster / gaver","Bankgebyrer"]
   },
   arrangementer: ["Familiesamling 2026"],
   budsjett: {},
   saldo: {},
-  avstemt: {}
+  avstemt: {},
+  dokumenter: {}
 };
+const GJELD_KAT = "Betaling av gjeld fra tidligere år";
 const nf = new Intl.NumberFormat("nb-NO",{minimumFractionDigits:2,maximumFractionDigits:2});
 const kr = n => nf.format(Math.round((n||0)*100)/100);
 const esc = s => String(s ?? "").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -250,18 +252,22 @@ function toast(msg){ const t=$("toast"); t.textContent=msg; t.hidden=false; clea
 /* ---------- Beregninger ---------- */
 const yearRows = () => S.rows.filter(r=>r.aar===S.year);
 const signed = r => r.type==="inn" ? r.belop : -r.belop;
+// konto: "bank" | "kontant" | "gjeld" (kostnad satt av, ikke betalt ennå).
+// GJELD_KAT: betaling av gjeld fra tidligere år, påvirker bank og gjeld, men ikke resultatet.
 function sums(rows){
-  let inn=0, ut=0; const byKat={}, byKonto={bank:0,kontant:0};
+  let inn=0, ut=0, gjeld=0; const byKat={}, byKonto={bank:0,kontant:0};
   for (const r of rows){
+    const sg = signed(r), konto = r.konto||"bank";
+    if (r.kategori===GJELD_KAT){ byKonto[konto]=(byKonto[konto]||0)+sg; gjeld+=sg; continue; }
     if (r.type==="inn") inn+=r.belop; else ut+=r.belop;
     const k = r.type+"|"+r.kategori; byKat[k]=(byKat[k]||0)+r.belop;
-    byKonto[r.konto||"bank"]=(byKonto[r.konto||"bank"]||0)+signed(r);
+    if (konto==="gjeld") gjeld-=sg; else byKonto[konto]=(byKonto[konto]||0)+sg;
   }
-  return {inn, ut, res:inn-ut, byKat, byKonto};
+  return {inn, ut, res:inn-ut, byKat, byKonto, gjeld};
 }
-const saldo = y => S.settings.saldo?.[y] || {bank:0,kontant:0};
+const saldo = y => ({bank:0, kontant:0, gjeld:0, ...(S.settings.saldo?.[y]||{})});
 const budsjett = y => S.settings.budsjett?.[y] || {};
-const missingBilag = rows => rows.filter(r=>!(r.bilag&&r.bilag.length) && !r.korrigerer);
+const missingBilag = rows => rows.filter(r=>!(r.bilag&&r.bilag.length) && !r.korrigerer && !r.bilagArkiv);
 function nextNr(year){ return S.rows.filter(r=>r.aar===year).reduce((m,r)=>Math.max(m,r.nr||0),0)+1; }
 function years(){
   const set = new Set([new Date().getFullYear(), S.year]);
@@ -315,14 +321,19 @@ function ledgerRows(rows, compact){
       r.konto==="kontant" ? `<span class="chip">Kontant</span>`:"",
       r.korrigerer ? `<span class="chip">Korrigerer #${r.korrigerer}</span>`:"",
       rev ? `<span class="chip">Korrigert av #${r.korrigertAv}</span>`:"",
-      (!r.bilag||!r.bilag.length) && !r.korrigerer ? `<span class="chip warn">Mangler bilag</span>` : `<span class="chip">${r.bilag?.length? "📎 "+r.bilag.length:""}</span>`
+      r.kategori===GJELD_KAT ? `<span class="chip">Ikke kostnad i år</span>`:"",
+      r.konto==="gjeld" ? `<span class="chip">Satt av, ikke betalt</span>`:"",
+      r.belop<0 && !r.korrigerer && r.type==="ut" ? `<span class="chip inn">Refusjon/egenandel</span>`:"",
+      r.belop<0 && !r.korrigerer && r.type==="inn" ? `<span class="chip">Reduserer inntekt</span>`:"",
+      r.bilag?.length ? `<span class="chip">📎 ${r.bilag.length}</span>` : r.bilagArkiv ? `<span class="chip">${esc(r.bilagArkiv)}</span>` : !r.korrigerer ? `<span class="chip warn">Mangler bilag</span>` : ""
     ].join("");
+    const sg = signed(r), amtCls = r.kategori===GJELD_KAT ? "" : sg>=0 ? "amt-inn" : "amt-ut";
     return `<tr class="rowlink ${rev?"reversed":""}" data-id="${esc(r.id)}" tabindex="0">
       <td class="c-nr num">#${r.nr}</td>
       <td class="c-dato num">${fmtDate(r.dato)}</td>
       <td class="desc"><div class="desc">${esc(r.beskrivelse)}</div><div class="meta"><span class="num m-only">${fmtDate(r.dato)}</span><span class="m-only">${esc(r.kategori)}</span>${chips}</div></td>
       <td class="c-kat">${esc(r.kategori)}</td>
-      <td class="c-amt r num ${r.type==="inn"?"amt-inn":"amt-ut"}">${r.type==="inn"?"+":"−"} ${kr(Math.abs(r.belop))}${r.belop<0?" (korr.)":""}</td>
+      <td class="c-amt r num ${amtCls}">${sg>=0?"+":"−"} ${kr(Math.abs(sg))}</td>
     </tr>`;}).join("")}
   </tbody></table></div>`;
 }
@@ -337,10 +348,10 @@ function vOversikt(){
   return `
   <section class="section">
     <div class="kpis">
-      <div class="kpi"><span class="lbl">Inntekter ${S.year}</span><span class="val amt-inn">${kr(s.inn)}</span><span class="sub">${rows.filter(r=>r.type==="inn").length} posteringer</span></div>
-      <div class="kpi"><span class="lbl">Utgifter ${S.year}</span><span class="val amt-ut">${kr(s.ut)}</span><span class="sub">${rows.filter(r=>r.type==="ut").length} posteringer</span></div>
+      <div class="kpi"><span class="lbl">Inntekter ${S.year}</span><span class="val amt-inn">${kr(s.inn)}</span><span class="sub">${rows.length} posteringer i alt</span></div>
+      <div class="kpi"><span class="lbl">Kostnader ${S.year}</span><span class="val amt-ut">${kr(s.ut)}</span><span class="sub">Etter refusjoner og egenandeler</span></div>
       <div class="kpi"><span class="lbl">Resultat</span><span class="val">${kr(s.res)}</span><span class="sub">${s.res>=0?"Overskudd":"Underskudd"}</span></div>
-      <div class="kpi"><span class="lbl">Beholdning nå</span><span class="val">${kr(ib+s.res)}</span><span class="sub">Inngående ${kr(ib)}</span></div>
+      <div class="kpi"><span class="lbl">Bank og kontanter</span><span class="val">${kr(ib+(s.byKonto.bank||0)+(s.byKonto.kontant||0))}</span><span class="sub">${(sal.gjeld+s.gjeld)?`Ubetalt gjeld ${kr(sal.gjeld+s.gjeld)}`:`Inngående ${kr(ib)}`}</span></div>
     </div>
   </section>
   <section class="section">
@@ -373,7 +384,7 @@ function filteredRows(){
 }
 function vKassebok(){
   const all = yearRows(); const rows = filteredRows(); const s = sums(rows);
-  const kats = [...S.settings.kategorier.inn, ...S.settings.kategorier.ut];
+  const kats = [...S.settings.kategorier.inn, ...S.settings.kategorier.ut, GJELD_KAT];
   return `<section class="section">
     <div class="section-head"><h2>Kassebok ${S.year}</h2><span class="hint">${all.length} posteringer · ny får bilag #${nextNr(S.year)}</span></div>
     <div class="filters">
@@ -444,10 +455,10 @@ function vArr(){
 
 function reportData(){
   const rows = yearRows(), s = sums(rows), sal = saldo(S.year), b = budsjett(S.year);
-  const ibBank = sal.bank||0, ibKont = sal.kontant||0;
-  const ubBank = ibBank + (s.byKonto.bank||0), ubKont = ibKont + (s.byKonto.kontant||0);
+  const ibBank = sal.bank||0, ibKont = sal.kontant||0, ibGjeld = sal.gjeld||0;
+  const ubBank = ibBank + (s.byKonto.bank||0), ubKont = ibKont + (s.byKonto.kontant||0), ubGjeld = ibGjeld + s.gjeld;
   const avst = S.settings.avstemt?.[S.year];
-  return {rows, s, b, ibBank, ibKont, ubBank, ubKont, avst};
+  return {rows, s, b, ibBank, ibKont, ibGjeld, ubBank, ubKont, ubGjeld, avst};
 }
 function resultTable(d, forExport){
   const line = (type) => S.settings.kategorier[type].map(k=>{
@@ -466,10 +477,14 @@ function resultTable(d, forExport){
 }
 function balanceTable(d){
   const showK = d.ibKont || d.s.byKonto.kontant;
-  return `<table class="rtable"><thead><tr><th>Beholdning</th><th class="r">1. januar</th><th class="r">Endring</th><th class="r">31. desember</th></tr></thead><tbody>
-    <tr><td>Bank</td><td class="r num">${kr(d.ibBank)}</td><td class="r num">${kr(d.s.byKonto.bank||0)}</td><td class="r num">${kr(d.ubBank)}</td></tr>
-    ${showK?`<tr><td>Kontanter</td><td class="r num">${kr(d.ibKont)}</td><td class="r num">${kr(d.s.byKonto.kontant||0)}</td><td class="r num">${kr(d.ubKont)}</td></tr>`:""}
-    <tr class="sum"><td>Sum</td><td class="r num">${kr(d.ibBank+d.ibKont)}</td><td class="r num">${kr(d.s.res)}</td><td class="r num">${kr(d.ubBank+d.ubKont)}</td></tr>
+  const ibE = d.ibBank+d.ibKont, ubE = d.ubBank+d.ubKont, ibEK = ibE-d.ibGjeld, ubEK = ubE-d.ubGjeld;
+  const row = (t,a,b,cls="") => `<tr class="${cls}"><td>${t}</td><td class="r num">${kr(a)}</td><td class="r num">${kr(b-a)}</td><td class="r num">${kr(b)}</td></tr>`;
+  return `<table class="rtable"><thead><tr><th>Balanse</th><th class="r">1. januar</th><th class="r">Endring</th><th class="r">31. desember</th></tr></thead><tbody>
+    ${row("Bankinnskudd", d.ibBank, d.ubBank)}
+    ${showK?row("Kontanter", d.ibKont, d.ubKont):""}
+    ${row("Sum eiendeler", ibE, ubE, "sum")}
+    ${(d.ibGjeld||d.ubGjeld)?row("Kortsiktig gjeld (ubetalte kostnader)", d.ibGjeld, d.ubGjeld):""}
+    ${row("Egenkapital", ibEK, ubEK, "sum")}
   </tbody></table>`;
 }
 function vRapport(){
@@ -477,6 +492,7 @@ function vRapport(){
   const arrs = S.settings.arrangementer.map(a=>[a,arrStats(a)]).filter(([,x])=>x.rows.length);
   const diff = d.avst!=null ? Math.round((d.avst - d.ubBank)*100)/100 : null;
   const miss = missingBilag(d.rows).length;
+  const docs = S.settings.dokumenter?.[S.year] || [];
   return `<section class="section">
     <div class="section-head"><h2>Årsrapport ${S.year}</h2>
       <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" id="dlReport">Last ned årsrapport</button><button class="btn" id="openReport">Åpne for utskrift</button><button class="btn" id="dlCsv">Last ned kassebok (CSV)</button></div></div>
@@ -489,6 +505,11 @@ function vRapport(){
       <p class="hint">Skriv inn saldoen på kontoutskriften per 31. desember. Den skal være lik beregnet banksaldo. Et avvik betyr at noe mangler eller er ført feil.</p>
       <div class="addrow">${canWrite?`<input id="avst" inputmode="decimal" placeholder="Saldo på kontoutskrift" value="${d.avst!=null?kr(d.avst):""}">`:`<span class="num">${d.avst!=null?kr(d.avst):"Ikke lagt inn"}</span>`}</div>
       ${diff===null?"":diff===0?`<div class="ok">Stemmer med beregnet banksaldo <span class="num">${kr(d.ubBank)}</span>.</div>`:`<div class="notice warn">Avvik på <span class="num">${kr(diff)}</span> mot beregnet banksaldo <span class="num">${kr(d.ubBank)}</span>.</div>`}
+    </div>
+    <div class="panel pad section"><h3>Årsdokumenter ${S.year}</h3>
+      <p class="hint">Revisjonsberetning, signert regnskap, protokoll fra årsmøtet og lignende.</p>
+      ${docs.length?`<div class="listedit">${docs.map(x=>`<div class="li"><span>${esc(x.navn)}</span><button class="btn small" data-doc="${esc(x.id)}">Åpne</button></div>`).join("")}</div>`:`<span class="hint">Ingen dokumenter lagt ved for ${S.year}.</span>`}
+      ${canWrite?`<div class="field"><label for="docUp">Legg til dokument</label><input id="docUp" type="file" multiple></div>`:""}
     </div>
     ${arrs.length?`<div class="panel tablewrap"><table class="rtable"><thead><tr><th>Arrangement</th><th class="r">Inntekter</th><th class="r">Kostnader</th><th class="r">Netto</th></tr></thead><tbody>${arrs.map(([a,x])=>`<tr><td>${esc(a)}</td><td class="r num">${kr(x.inn)}</td><td class="r num">${kr(x.ut)}</td><td class="r num">${kr(x.res)}</td></tr>`).join("")}</tbody></table></div>`:""}
   </section>`;
@@ -513,6 +534,7 @@ function vInnst(){
       <div class="formgrid">
         <div class="field"><label for="ibBank">Bankkonto</label><input id="ibBank" inputmode="decimal" value="${S.settings.saldo?.[S.year]!=null?kr(sal.bank):""}" placeholder="0,00" ${dis}></div>
         <div class="field"><label for="ibKont">Kontantkasse</label><input id="ibKont" inputmode="decimal" value="${S.settings.saldo?.[S.year]!=null?kr(sal.kontant):""}" placeholder="0,00" ${dis}></div>
+        <div class="field full"><label for="ibGjeld">Ubetalte kostnader fra året før (kortsiktig gjeld)</label><input id="ibGjeld" inputmode="decimal" value="${S.settings.saldo?.[S.year]!=null?kr(sal.gjeld):""}" placeholder="0,00" ${dis}></div>
       </div>
       ${canWrite && S.settings.saldo?.[S.year]==null && S.year>Math.min(...years()) ? `<div><button class="btn small" id="carry">Hent utgående saldo fra ${S.year-1}</button></div>`:""}
     </div>
@@ -524,6 +546,9 @@ function vInnst(){
       <div class="listedit">${st.arrangementer.map((a,i)=>`<div class="li"><span>${esc(a)}</span>${canWrite && !usedArr.has(a)?`<button class="btn small" data-rmarr="${i}">Fjern</button>`:`<span class="chip">I bruk</span>`}</div>`).join("")}</div>
     </div>
     <p class="hint">Kategorier og arrangementer som er brukt i en postering kan ikke fjernes, slik at gamle bilag fortsatt henger sammen.</p>
+    ${canWrite?`<div class="panel pad section"><h3>Importer et år fra fil</h3>
+      <p class="hint">Legger inn et helt år fra en importfil, for eksempel et gammelt Excel-regnskap som Claude har gjort om. Du får se en oppsummering før noe lagres, og importen stopper hvis året allerede har posteringer.</p>
+      <div class="field"><label for="impFile">Velg importfil (.json)</label><input id="impFile" type="file" accept=".json,application/json"></div></div>`:""}
     <div class="panel pad section"><h3>Sikkerhetskopi</h3>
       <p class="hint">Last ned hele regnskapet, alle år og alle bilagsfiler, som én fil. Ta en kopi etter årsoppgjøret og legg den i Dropbox. Bokføringsloven krever at regnskap og bilag oppbevares i minst fem år.</p>
       <div><button class="btn" id="backup">Last ned sikkerhetskopi</button></div></div>
@@ -560,6 +585,18 @@ function bindView(){
     saveSettings({arrangementer:[...S.settings.arrangementer, v]}).then(render);
   };
   if (S.tab==="rapport"){
+    $("main").querySelectorAll("[data-doc]").forEach(b=>b.onclick=()=>{
+      const x=(S.settings.dokumenter?.[S.year]||[]).find(z=>z.id===b.dataset.doc); if(x) openStored(x.id, x.navn, x.type);
+    });
+    if ($("docUp")) $("docUp").onchange=async e=>{
+      const files=[...e.target.files]; if(!files.length) return;
+      e.target.disabled=true; toast("Laster opp …");
+      try{
+        const nye = await uploadFiles(files, {any:true});
+        const dk={...(S.settings.dokumenter||{})}; dk[S.year]=[...(dk[S.year]||[]), ...nye];
+        await saveSettings({dokumenter:dk}); render(); toast("Dokument lagt til");
+      }catch(ex){ e.target.disabled=false; toast(ex.__upload?ex.message:writeErr(ex)); }
+    };
     $("dlReport").onclick=()=>downloadReport(false); $("openReport").onclick=()=>downloadReport(true); $("dlCsv").onclick=downloadCsv;
     if ($("avst")) $("avst").onchange=e=>{
       const v = e.target.value.trim()==="" ? null : parseAmt(e.target.value);
@@ -574,8 +611,9 @@ function bindView(){
     const saveIB=()=>{
       const bank = $("ibBank").value.trim()===""?0:parseAmt($("ibBank").value);
       const kont = $("ibKont").value.trim()===""?0:parseAmt($("ibKont").value);
-      if (isNaN(bank)||isNaN(kont)) return toast("Skriv saldoen som tall.");
-      const sa={...(S.settings.saldo||{})}; sa[S.year]={bank,kontant:kont};
+      const gj = $("ibGjeld").value.trim()===""?0:parseAmt($("ibGjeld").value);
+      if (isNaN(bank)||isNaN(kont)||isNaN(gj)) return toast("Skriv saldoen som tall.");
+      const sa={...(S.settings.saldo||{})}; sa[S.year]={bank,kontant:kont,gjeld:gj};
       saveSettings({saldo:sa}).then(()=>{render();toast("Inngående saldo lagret");});
     };
     $("backup").onclick=async()=>{
@@ -592,10 +630,11 @@ function bindView(){
       }catch(ex){ toast("Kunne ikke lage sikkerhetskopi: "+(ex.message||ex.code)); }
       b.disabled=false; b.textContent="Last ned sikkerhetskopi";
     };
-    $("ibBank").onchange=saveIB; $("ibKont").onchange=saveIB;
+    $("ibBank").onchange=saveIB; $("ibKont").onchange=saveIB; $("ibGjeld").onchange=saveIB;
+    $("impFile").onchange=e=>{ const f=e.target.files[0]; e.target.value=""; if(f) startImport(f); };
     if ($("carry")) $("carry").onclick=()=>{
       const y=S.year; S.year=y-1; const d=reportData(); S.year=y;
-      const sa={...(S.settings.saldo||{})}; sa[y]={bank:Math.round(d.ubBank*100)/100,kontant:Math.round(d.ubKont*100)/100};
+      const sa={...(S.settings.saldo||{})}; sa[y]={bank:Math.round(d.ubBank*100)/100,kontant:Math.round(d.ubKont*100)/100,gjeld:Math.round(d.ubGjeld*100)/100};
       saveSettings({saldo:sa}).then(()=>{render();toast(`Hentet utgående saldo fra ${y-1}`);});
     };
     $("main").querySelectorAll("[data-addkat]").forEach(b=>b.onclick=()=>{
@@ -630,9 +669,15 @@ document.addEventListener("keydown",e=>{ if(e.key==="Escape" && $("modal").inner
 
 function openForm(pre){
   if (!canWrite) return;
-  const p = pre || {type:"ut", dato: (S.year===new Date().getFullYear()? today() : `${S.year}-12-31`), konto:"bank"};
+  let p = pre || {type:"ut", dato: (S.year===new Date().getFullYear()? today() : `${S.year}-12-31`), konto:"bank"};
+  if (p.belop<0 && p.type==="ut") p = {...p, type:"inn", refKat:p.kategori, belop:-p.belop};
   let type = p.type;
-  const katOpts = t => S.settings.kategorier[t].map(k=>`<option ${p.kategori===k?"selected":""}>${esc(k)}</option>`).join("");
+  const opt = (v,label,sel) => `<option value="${esc(v)}" ${sel?"selected":""}>${esc(label)}</option>`;
+  const katOpts = t => {
+    const main = S.settings.kategorier[t].map(k=>opt(k,k,p.kategori===k && !p.refKat)).join("");
+    if (t==="inn") return main + `<optgroup label="Refusjon eller egenandel (trekkes fra en kostnad)">${S.settings.kategorier.ut.map(k=>opt("ref|"+k,k,p.refKat===k)).join("")}</optgroup>`;
+    return main + `<optgroup label="Ikke en kostnad i år">${opt(GJELD_KAT,GJELD_KAT,p.kategori===GJELD_KAT)}</optgroup>`;
+  };
   modal(`
     <h2>${pre?.korrFra?`Riktig postering etter korreksjon av #${pre.korrFra}`:"Ny postering"}</h2>
     <div class="seg" role="group" aria-label="Type">
@@ -645,8 +690,9 @@ function openForm(pre){
       <div class="field full"><label for="fBesk">Beskrivelse</label><input id="fBesk" placeholder="F.eks. Leie av Stemnestaden, faktura 1042" value="${esc(p.beskrivelse||"")}" required></div>
       <div class="field"><label for="fKat">Kategori</label><select id="fKat">${katOpts(type)}</select></div>
       <div class="field"><label for="fArr2">Arrangement</label><select id="fArr2"><option value="">Ingen</option>${S.settings.arrangementer.map(a=>`<option ${p.arrangement===a?"selected":""}>${esc(a)}</option>`).join("")}</select></div>
-      <div class="field"><label for="fKonto">Betalt via</label><select id="fKonto"><option value="bank" ${p.konto!=="kontant"?"selected":""}>Bankkonto</option><option value="kontant" ${p.konto==="kontant"?"selected":""}>Kontanter</option></select></div>
+      <div class="field"><label for="fKonto">Betalt via</label><select id="fKonto"><option value="bank" ${!p.konto||p.konto==="bank"?"selected":""}>Bankkonto</option><option value="kontant" ${p.konto==="kontant"?"selected":""}>Kontanter</option><option value="gjeld" ${p.konto==="gjeld"?"selected":""}>Ikke betalt ennå (settes av som gjeld)</option></select></div>
       <div class="field"><label for="fFiler">Bilag (kvittering, faktura)</label><input id="fFiler" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" multiple ${assets?"":"disabled"}></div>
+      <label class="full" style="display:flex;gap:8px;align-items:center;font-size:.9rem"><input type="checkbox" id="fArkiv" ${p.bilagArkiv?"checked":""}> Bilaget oppbevares på papir eller i et annet arkiv</label>
       <div class="field full"><label for="fNotat">Notat (valgfritt)</label><textarea id="fNotat" placeholder="Hvem betalte, hva gjelder det, vedtak i styret …">${esc(p.notat||"")}</textarea></div>
       ${assets?"":`<div class="notice warn full">Opplasting av bilag er ikke tilgjengelig i denne visningen.</div>`}
       <div id="fErr" class="notice warn full" hidden></div>
@@ -664,16 +710,22 @@ function openForm(pre){
     if (!dato) return err("Velg en dato.");
     if (isNaN(belop) || belop<=0) return err("Skriv inn et beløp over 0, f.eks. 1 250,00.");
     if (!besk) return err("Skriv en kort beskrivelse, så revisor skjønner hva posteringen gjelder.");
+    let kat=$("fKat").value, rtype=type, rbel=Math.round(belop*100)/100;
+    if (kat.startsWith("ref|")){ kat=kat.slice(4); rtype="ut"; rbel=-rbel; }
+    if (kat===GJELD_KAT && rtype!=="ut") return err("Betaling av gammel gjeld føres som utgift.");
+    if (kat===GJELD_KAT && $("fKonto").value==="gjeld") return err("Betaling av gammel gjeld må gå fra bankkonto eller kontanter.");
+    const arkiv = $("fArkiv").checked;
     const files=[...$("fFiler").files];
-    if (!files.length && !$("pf").dataset.okNoBilag){ $("pf").dataset.okNoBilag="1"; return err("Ingen bilag lagt ved. Trykk «Lagre postering» igjen for å lagre likevel, og legg til bilaget senere."); }
+    if (!files.length && !arkiv && !$("pf").dataset.okNoBilag){ $("pf").dataset.okNoBilag="1"; return err("Ingen bilag lagt ved. Trykk «Lagre postering» igjen for å lagre likevel, og legg til bilaget senere."); }
     $("fSave").disabled=true; $("fSave").textContent= files.length? "Laster opp bilag …":"Lagrer …";
     try{
       const bilag = await uploadFiles(files);
       const aar = +dato.slice(0,4);
       let nr = nextNr(aar), id;
       for(;;){ id=`${aar}-${String(nr).padStart(4,"0")}`; const snap=await db.doc("posteringer/"+id).get(); if(!snap.exists) break; nr++; }
-      const row={nr, aar, dato, type, belop:Math.round(belop*100)/100, beskrivelse:besk, kategori:$("fKat").value,
+      const row={nr, aar, dato, type:rtype, belop:rbel, beskrivelse:besk, kategori:kat,
         arrangement:$("fArr2").value||"", konto:$("fKonto").value, notat:$("fNotat").value.trim(), bilag, opprettet:new Date().toISOString()};
+      if (arkiv) row.bilagArkiv = "Papirbilag";
       if (pre?.korrFra) row.notat = (row.notat?row.notat+" · ":"") + `Erstatter bilag #${pre.korrFra}`;
       await db.doc("posteringer/"+id).set(row);
       if (!S.hasSettings) await saveSettings({});
@@ -683,10 +735,10 @@ function openForm(pre){
   };
   setTimeout(()=>$("fBelop").focus(),50);
 }
-async function uploadFiles(files){
+async function uploadFiles(files, opts){
   const out=[];
   for (const f of files){
-    try{ const r = await assets.upload(f); out.push({id:r.id, navn:f.name, type:r.contentType}); }
+    try{ const r = await assets.upload(f, opts); out.push({id:r.id, navn:f.name, type:r.contentType}); }
     catch(e){
       const m = e?.code==="unsupported_type" ? `«${f.name}» har et filformat som ikke støttes. Bruk JPG, PNG eller PDF.` :
         e?.code==="too_large" || /large|size/i.test(e?.message||"") ? `«${f.name}» er for stor (maks 20 MB).` :
@@ -708,16 +760,17 @@ function openDetail(id){
     <div class="section-head"><h2>Bilag #${r.nr} · ${r.aar}</h2><span class="chip ${r.type}">${r.type==="inn"?"Inntekt":"Utgift"}</span></div>
     ${r.korrigertAv?`<div class="notice">Denne posteringen er korrigert av bilag #${r.korrigertAv}. Den teller fortsatt i kasseboka, men motposteringen nuller den ut.</div>`:""}
     <dl>
-      <dt>Beløp</dt><dd class="num ${r.type==="inn"?"amt-inn":"amt-ut"}">${kr(r.belop)} kr</dd>
+      <dt>Beløp</dt><dd><span class="num ${signed(r)>=0?"amt-inn":"amt-ut"}">${kr(Math.abs(r.belop))} kr</span>${r.belop<0&&!r.korrigerer?(r.type==="ut"?" · refusjon/egenandel som reduserer kostnaden":" · reduserer inntekten"):""}${r.kategori===GJELD_KAT?" · ikke kostnad i år, gjelder gjeld fra året før":""}</dd>
       <dt>Dato</dt><dd class="num">${fmtDate(r.dato)}</dd>
       <dt>Beskrivelse</dt><dd>${esc(r.beskrivelse)}</dd>
       <dt>Kategori</dt><dd>${esc(r.kategori)}</dd>
       <dt>Arrangement</dt><dd>${esc(r.arrangement||"Ingen")}</dd>
-      <dt>Betalt via</dt><dd>${r.konto==="kontant"?"Kontanter":"Bankkonto"}</dd>
+      <dt>Betalt via</dt><dd>${r.konto==="kontant"?"Kontanter":r.konto==="gjeld"?"Ikke betalt ennå (satt av som gjeld)":"Bankkonto"}</dd>
+      ${r.importert?`<dt>Kilde</dt><dd>${esc(r.importert)}</dd>`:""}
       ${r.notat?`<dt>Notat</dt><dd>${esc(r.notat)}</dd>`:""}
       <dt>Registrert</dt><dd class="num">${r.opprettet?new Date(r.opprettet).toLocaleString("nb-NO"):""}</dd>
     </dl>
-    <div class="section"><h3>Bilag</h3>${thumbs?`<div class="thumbs">${thumbs}</div>`:`<span class="hint">${r.korrigerer?"Motpostering, bilaget er det opprinnelige bilaget #"+r.korrigerer+".":"Ingen bilag lagt ved ennå."}</span>`}
+    <div class="section"><h3>Bilag</h3>${thumbs?`<div class="thumbs">${thumbs}</div>`:`<span class="hint">${r.korrigerer?"Motpostering, bilaget er det opprinnelige bilaget #"+r.korrigerer+".":(r.bilagArkiv?"Ingen fil lagt ved. Bilaget finnes som: "+esc(r.bilagArkiv)+".":"Ingen bilag lagt ved ennå.")}</span>`}
       ${canWrite && assets && !r.korrigerer?`<div class="field"><label for="addBilag">Legg til bilag</label><input id="addBilag" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" multiple></div>`:""}
     </div>
     <div id="dMsg" class="notice warn" hidden></div>
@@ -769,14 +822,14 @@ async function save(filename, data){
 function downloadCsv(){
   const n = v => String(Math.round(v*100)/100).replace(".",",");
   const q = s => `"${String(s??"").replace(/"/g,'""')}"`;
-  const head = ["Bilagsnr","Dato","Type","Beløp","Beskrivelse","Kategori","Arrangement","Konto","Korrigerer bilag","Korrigert av bilag","Antall bilagsfiler","Notat"];
-  const rows = [...yearRows()].sort((a,b)=>a.nr-b.nr).map(r=>[r.nr, fmtDate(r.dato), r.type==="inn"?"Inntekt":"Utgift", n(signed(r)), q(r.beskrivelse), q(r.kategori), q(r.arrangement), r.konto==="kontant"?"Kontant":"Bank", r.korrigerer||"", r.korrigertAv||"", (r.bilag||[]).length, q(r.notat)].join(";"));
+  const head = ["Bilagsnr","Dato","Type","Beløp","Beskrivelse","Kategori","Arrangement","Konto","Korrigerer bilag","Korrigert av bilag","Antall bilagsfiler","Bilag oppbevares","Notat"];
+  const rows = [...yearRows()].sort((a,b)=>a.nr-b.nr).map(r=>[r.nr, fmtDate(r.dato), r.type==="inn"?"Inntekt":"Utgift", n(signed(r)), q(r.beskrivelse), q(r.kategori), q(r.arrangement), r.konto==="kontant"?"Kontant":r.konto==="gjeld"?"Gjeld":"Bank", r.korrigerer||"", r.korrigertAv||"", (r.bilag||[]).length, q(r.bilagArkiv), q(r.notat)].join(";"));
   save(`kassebok-${S.year}.csv`, "﻿"+[head.join(";"),...rows].join("\r\n"));
 }
 function downloadReport(open){
   const d = reportData();
   const arrs = S.settings.arrangementer.map(a=>[a,arrStats(a)]).filter(([,x])=>x.rows.length);
-  const ledger = [...d.rows].sort((a,b)=>a.nr-b.nr).map(r=>`<tr><td>${r.nr}</td><td>${fmtDate(r.dato)}</td><td>${esc(r.beskrivelse)}${r.korrigerer?` <i>(korr. #${r.korrigerer})</i>`:""}</td><td>${esc(r.kategori)}</td><td class="r">${kr(signed(r))}</td><td>${(r.bilag||[]).length||(r.korrigerer?"–":"MANGLER")}</td></tr>`).join("");
+  const ledger = [...d.rows].sort((a,b)=>a.nr-b.nr).map(r=>`<tr><td>${r.nr}</td><td>${fmtDate(r.dato)}</td><td>${esc(r.beskrivelse)}${r.korrigerer?` <i>(korr. #${r.korrigerer})</i>`:""}</td><td>${esc(r.kategori)}</td><td class="r">${kr(signed(r))}</td><td>${(r.bilag||[]).length||(r.bilagArkiv?esc(r.bilagArkiv):r.korrigerer?"–":"MANGLER")}</td></tr>`).join("");
   const diff = d.avst!=null ? Math.round((d.avst-d.ubBank)*100)/100 : null;
   const html = `<!doctype html><html lang="nb"><head><meta charset="utf-8"><title>Årsregnskap ${S.year} – ${esc(S.settings.navn)}</title>
 <style>body{font-family:"IBM Plex Sans",Arial,sans-serif;color:#111;max-width:780px;margin:32px auto;padding:0 20px;font-size:13px;line-height:1.45}
@@ -826,19 +879,113 @@ async function shrinkImage(file){
   }catch(e){ return file; }
 }
 function toB64(blob){ return new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(String(fr.result).split(",")[1]); fr.onerror=rej; fr.readAsDataURL(blob); }); }
+async function storeB64(b64, meta){
+  const ref = db.collection("filer").doc();
+  const n = Math.max(1, Math.ceil(b64.length/CHUNK));
+  for (let i=0;i<n;i++) await ref.collection("biter").doc(String(i).padStart(3,"0")).set({d:b64.slice(i*CHUNK,(i+1)*CHUNK)});
+  await ref.set({...meta, biter:n, lastetOpp:new Date().toISOString()});
+  return ref.id;
+}
 assets = {
-  async upload(file){
-    if (!/^(image\/(jpeg|png|webp)|application\/pdf)$/.test(file.type)) throw {code:"unsupported_type"};
-    const f = await shrinkImage(file);
+  async upload(file, opts={}){
+    if (!opts.any && !/^(image\/(jpeg|png|webp)|application\/pdf)$/.test(file.type)) throw {code:"unsupported_type"};
+    const f = opts.any ? file : await shrinkImage(file);
     if (f.size > MAX_BYTES) throw {code:"too_large", message:"for stor"};
-    const b64 = await toB64(f);
-    const ref = db.collection("filer").doc();
-    const n = Math.ceil(b64.length/CHUNK);
-    for (let i=0;i<n;i++) await ref.collection("biter").doc(String(i).padStart(3,"0")).set({d:b64.slice(i*CHUNK,(i+1)*CHUNK)});
-    await ref.set({navn:f.name, type:f.type, storrelse:f.size, biter:n, lastetOpp:new Date().toISOString()});
-    return {id:ref.id, contentType:f.type};
+    const type = f.type || "application/octet-stream";
+    const id = await storeB64(await toB64(f), {navn:f.name, type, storrelse:f.size});
+    return {id, contentType:type};
   }
 };
+async function openStored(id, navn, type){
+  const visning = /^(image\/|application\/pdf)/.test(type||"");
+  const w = visning ? window.open("","_blank") : null;
+  try{
+    const u = await fileUrl(id);
+    if (visning){ if (w) w.location=u; else location.href=u; }
+    else { const a=document.createElement("a"); a.href=u; a.download=navn||"dokument"; document.body.appendChild(a); a.click(); a.remove(); }
+  }catch(e){ if (w) w.close(); toast("Kunne ikke åpne filen."); }
+}
+
+/* ---------- Import av et helt år ---------- */
+async function startImport(file){
+  let d;
+  try{ d = JSON.parse(await file.text()); }catch(e){ return toast("Filen kunne ikke leses. Velg en importfil (.json)."); }
+  if (d?.format!=="nffr-kassebok-import" || !Array.isArray(d.posteringer) || !d.aar) return toast("Dette er ikke en importfil for kasseboka.");
+  const y = +d.aar;
+  const problem = (()=>{
+    const seen = new Set();
+    for (const p of d.posteringer){
+      if (!Number.isInteger(p.nr) || p.nr<1) return `Ugyldig bilagsnummer: ${p.nr}`;
+      if (seen.has(p.nr)) return `Bilagsnummer ${p.nr} finnes to ganger i filen`;
+      seen.add(p.nr);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(p.dato||"") || +p.dato.slice(0,4)!==y) return `Bilag ${p.nr} har dato utenfor ${y}`;
+      if (!["inn","ut"].includes(p.type) || typeof p.belop!=="number" || !p.kategori) return `Bilag ${p.nr} mangler type, beløp eller kategori`;
+    }
+    return "";
+  })();
+  const finnes = S.rows.filter(r=>r.aar===y).length;
+  const rows = d.posteringer.map(p=>({...p, aar:y}));
+  const s = sums(rows), ib = {bank:0,kontant:0,gjeld:0,...(d.saldo||{})};
+  const ubBank = ib.bank + (s.byKonto.bank||0), ubGjeld = ib.gjeld + s.gjeld;
+  const nrs = rows.map(r=>r.nr);
+  const kan = !problem && !finnes;
+  modal(`
+    <h2>Importer regnskap for ${y}</h2>
+    ${d.kilde?`<p class="hint">Kilde: ${esc(d.kilde)}</p>`:""}
+    ${problem?`<div class="notice warn">Filen har en feil og kan ikke importeres: ${esc(problem)}.</div>`:""}
+    ${finnes?`<div class="notice warn">${y} har allerede ${finnes} posteringer. Importen er stoppet for å unngå at noe blir ført to ganger.</div>`:""}
+    <dl>
+      <dt>Posteringer</dt><dd class="num">${rows.length} (bilag ${Math.min(...nrs)}–${Math.max(...nrs)})</dd>
+      <dt>Inntekter</dt><dd class="num">${kr(s.inn)}</dd>
+      <dt>Kostnader</dt><dd class="num">${kr(s.ut)}</dd>
+      <dt>Årsresultat</dt><dd class="num">${kr(s.res)}</dd>
+      <dt>Bank 1. januar</dt><dd class="num">${kr(ib.bank)}</dd>
+      <dt>Bank 31. desember</dt><dd class="num">${kr(ubBank)}${d.avstemt!=null?(Math.abs(d.avstemt-ubBank)<0.005?" · stemmer med kontoutskrift":" · avvik mot kontoutskrift "+kr(d.avstemt-ubBank)):""}</dd>
+      <dt>Gjeld 31. desember</dt><dd class="num">${kr(ubGjeld)}</dd>
+      <dt>Budsjett</dt><dd>${d.budsjett?Object.keys(d.budsjett).length+" poster":"Ingen"}</dd>
+      <dt>Årsdokumenter</dt><dd>${(d.dokumenter||[]).map(x=>esc(x.navn)).join(", ")||"Ingen"}</dd>
+    </dl>
+    <p class="hint">Kategorilisten byttes til den i filen. Kategorier som allerede er brukt i andre år beholdes.</p>
+    <div id="impMsg" class="notice" hidden></div>
+    <div class="actions"><button class="btn" id="impNo">Avbryt</button>${kan?`<button class="btn primary" id="impYes">Importer ${rows.length} posteringer</button>`:""}</div>`);
+  $("impNo").onclick=closeModal;
+  if (!kan) return;
+  $("impYes").onclick=async()=>{
+    const msg = t => { $("impMsg").textContent=t; $("impMsg").hidden=false; };
+    $("impYes").disabled=true; $("impNo").disabled=true;
+    try{
+      const nyeDok=[];
+      for (const x of (d.dokumenter||[])){
+        msg(`Laster opp ${x.navn} …`);
+        const id = await storeB64(x.data, {navn:x.navn, type:x.type, storrelse:x.storrelse||0});
+        nyeDok.push({id, navn:x.navn, type:x.type});
+      }
+      msg("Lagrer posteringer …");
+      const now = new Date().toISOString();
+      for (let i=0;i<rows.length;i+=400){
+        const batch = db.batch();
+        for (const p of rows.slice(i,i+400)){
+          const id = `${y}-${String(p.nr).padStart(4,"0")}`;
+          batch.set(db.doc("posteringer/"+id), {nr:p.nr, aar:y, dato:p.dato, type:p.type, belop:Math.round(p.belop*100)/100,
+            beskrivelse:p.beskrivelse||"", kategori:p.kategori, arrangement:p.arrangement||"", konto:p.konto||"bank",
+            notat:p.notat||"", bilag:[], bilagArkiv:p.bilagArkiv||"", importert:d.kilde||"Importfil", opprettet:now});
+        }
+        await batch.commit();
+      }
+      msg("Oppdaterer innstillinger …");
+      const brukt = t => S.rows.filter(r=>r.type===t && r.aar!==y).map(r=>r.kategori);
+      const kat = {inn:[...new Set([...(d.kategorier?.inn||S.settings.kategorier.inn), ...brukt("inn")])],
+                   ut:[...new Set([...(d.kategorier?.ut||S.settings.kategorier.ut), ...brukt("ut")].filter(k=>k!==GJELD_KAT))]};
+      const patch = {kategorier:kat, arrangementer:[...new Set([...S.settings.arrangementer, ...(d.arrangementer||[])])],
+        saldo:{...(S.settings.saldo||{}), [y]:ib}};
+      if (d.budsjett) patch.budsjett = {...(S.settings.budsjett||{}), [y]:d.budsjett};
+      if (d.avstemt!=null) patch.avstemt = {...(S.settings.avstemt||{}), [y]:d.avstemt};
+      if (nyeDok.length) patch.dokumenter = {...(S.settings.dokumenter||{}), [y]:[...(S.settings.dokumenter?.[y]||[]), ...nyeDok]};
+      await saveSettings(patch);
+      S.year = y; closeModal(); setTab("oversikt"); toast(`${rows.length} posteringer importert til ${y}`);
+    }catch(ex){ msg("Importen stoppet: "+writeErr(ex)+" Ta kontakt før du prøver igjen, så vi ikke får doble posteringer."); }
+  };
+}
 async function fileUrl(id){
   if (urlCache[id]) return urlCache[id];
   const meta = (await db.doc("filer/"+id).get()).data();
