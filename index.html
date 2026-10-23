@@ -6,7 +6,7 @@
 <meta name="robots" content="noindex,nofollow">
 <title>NFF Rogaland Kassebok</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&display=swap">
 <style>
 /* Layout: kasserer-protokoll — sticky topp med år og faner, én kolonne innhold, tall i mono-kolonner */
 :root{
@@ -15,9 +15,9 @@
   --ink:#2340a0; --ink-soft:#e3e9fb; --on-ink:#ffffff;
   --inn:#11734a; --inn-soft:#dff2e8; --ut:#b3362c; --ut-soft:#fbe6e3;
   --warn:#8a5a00; --warn-soft:#fdf0d2;
-  --font-display:"Bricolage Grotesque", "IBM Plex Sans", system-ui, sans-serif;
-  --font-body:"IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-num:"IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --font-display:"Newsreader", Georgia, serif;
+  --font-body:"Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-num:"Atkinson Hyperlegible", system-ui, sans-serif;
   --r:10px;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
@@ -176,6 +176,108 @@ main{padding-block:20px 120px;display:grid;gap:20px}
 .linkbtn{background:none;border:0;color:var(--ink);cursor:pointer;padding:0;font-size:.85rem;text-decoration:underline}
 .loading{color:var(--muted);padding:40px 0;text-align:center}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+/* ===== Profil: samme stil som Samlingsplanleggeren (skoggrønn, gull, krem, Newsreader + Atkinson) ===== */
+:root{
+  --bg:#F3EFE5; --surface:#FFFDF7; --surface-2:#F7F3E9; --line:#E2DACA; --line-soft:#EDE6D6;
+  --fg:#1A1F1C; --muted:#6F6A5E;
+  --ink:#16342E; --ink-hover:#24544A; --ink-soft:#EDF3F0; --on-ink:#FFFDF7;
+  --inn:#2E7D4F; --inn-soft:#EDF3F0; --ut:#9C3B28; --ut-soft:#FBEFEB;
+  --warn:#8A6410; --warn-soft:#FDF6E8; --warn-line:#EAD9B4;
+  --gold:#A87A16; --head:#16342E; --head-fg:#EFE9DA; --head-muted:#A9C4B9;
+  --r:16px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#111613; --surface:#18201C; --surface-2:#1F2924; --line:#2F3B35; --line-soft:#26312C;
+  --fg:#EFE9DA; --muted:#A8AFA6;
+  --ink:#A9C4B9; --ink-hover:#C3D8CF; --ink-soft:#1E2E28; --on-ink:#111613;
+  --inn:#7FCB9C; --inn-soft:#18301F; --ut:#F09A86; --ut-soft:#3A1F19;
+  --warn:#E7C26A; --warn-soft:#33291A; --warn-line:#5A4720;
+  --gold:#D4A84A; --head:#0F2420; --head-fg:#EFE9DA; --head-muted:#A9C4B9; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#111613; --surface:#18201C; --surface-2:#1F2924; --line:#2F3B35; --line-soft:#26312C;
+  --fg:#EFE9DA; --muted:#A8AFA6;
+  --ink:#A9C4B9; --ink-hover:#C3D8CF; --ink-soft:#1E2E28; --on-ink:#111613;
+  --inn:#7FCB9C; --inn-soft:#18301F; --ut:#F09A86; --ut-soft:#3A1F19;
+  --warn:#E7C26A; --warn-soft:#33291A; --warn-line:#5A4720;
+  --gold:#D4A84A; --head:#0F2420; --head-fg:#EFE9DA; --head-muted:#A9C4B9; color-scheme:dark}
+
+:focus-visible{outline:2px solid var(--gold)}
+a{color:var(--ink)} a:hover{color:var(--gold)}
+h1,h2,h3{font-weight:600;letter-spacing:-.015em}
+h2{font-size:1.45rem}
+h3{font-size:1.15rem}
+.hint{font-size:.9rem}
+body::before{background:var(--head)}
+
+/* Topp */
+header.top{background:var(--head);color:var(--head-fg);border-bottom:3px solid var(--gold)}
+.top .row1{padding-block:20px 10px;align-items:flex-end;gap:20px}
+.top h1{display:flex;flex-direction:column-reverse;gap:4px;font-size:2rem;line-height:1.1;color:#FFFDF7}
+.top h1 small{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--head-muted)}
+.yearsel{flex-direction:column;align-items:flex-start;gap:4px;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--head-muted)}
+.yearsel select{background:transparent;border:0;border-bottom:1px solid rgba(239,233,218,.3);border-radius:0;color:#FFFDF7;font-family:var(--font-body);font-size:15px;letter-spacing:0;padding:3px 2px 5px;min-height:34px}
+.yearsel select option{color:#1A1F1C;background:#FFFDF7}
+.top #logout{background:transparent;color:var(--head-fg);border:1px solid rgba(239,233,218,.3)}
+.top #logout:hover{background:rgba(239,233,218,.1)}
+nav.tabs{gap:22px}
+nav.tabs button{color:var(--head-muted);font-weight:700;font-size:15px;padding:10px 2px 12px;margin-bottom:-3px;border-bottom:3px solid transparent}
+nav.tabs button:hover{color:#FFFDF7}
+nav.tabs button[aria-selected="true"]{color:#FFFDF7;border-bottom-color:var(--gold)}
+
+/* Flater */
+main{padding-block:28px 120px;gap:22px}
+.panel{border-color:var(--line);border-radius:16px}
+.pad{padding:20px 22px}
+.kpis{background:var(--line-soft);border-color:var(--line);border-radius:16px;box-shadow:0 1px 2px rgba(26,31,28,.05),0 14px 34px rgba(26,31,28,.09)}
+.kpi{padding:15px 18px}
+.kpi .lbl{font-size:10.5px;letter-spacing:.11em;font-weight:700}
+.kpi .val{font-family:var(--font-display);font-size:1.6rem;font-weight:600;line-height:1.15}
+.kpi .sub{font-size:12px}
+
+/* Knapper og merker */
+.btn{border-radius:9px;font-weight:700;border-color:var(--line);min-height:40px}
+.btn:hover{background:var(--surface-2);color:var(--ink)}
+.btn.primary{background:var(--ink);border-color:var(--ink);color:var(--on-ink)}
+.btn.primary:hover{background:var(--ink-hover);filter:none;color:var(--on-ink)}
+.btn.danger{border-color:#E2CFC8}
+.btn.danger:hover{background:var(--ut-soft);color:var(--ut)}
+.btn.small{min-height:34px}
+.fab{border-radius:999px;box-shadow:0 0 0 3px var(--gold),0 10px 26px rgba(26,31,28,.28)}
+.chip{font-size:11px;font-weight:700;letter-spacing:.06em;padding:3px 10px;border:1px solid var(--line)}
+.chip.inn{border-color:#A9C4B9} .chip.ut{border-color:#E2CFC8} .chip.warn{border-color:var(--warn-line)} .chip.ink{border-color:#A9C4B9}
+
+/* Tabeller */
+.ledger th,.rtable th{font-size:10.5px;letter-spacing:.11em;font-weight:700;background:var(--surface-2)}
+.ledger td,.ledger th,.rtable td,.rtable th{border-bottom-color:var(--line-soft)}
+.ledger tr.rowlink:hover td{background:var(--ink-soft)}
+.rtable tr.grp td{background:var(--surface-2);font-family:var(--font-display);font-size:1rem}
+.rtable tr.sum td{border-top-color:var(--ink)}
+.rtable input{border-radius:8px}
+.bar{height:8px;border-radius:999px;background:var(--line-soft)}
+.bar>i{background:var(--ink);border-radius:999px}
+@media (max-width:640px){.ledger tr{border-bottom-color:var(--line-soft)}}
+
+/* Varsler */
+.attn .item{background:var(--warn-soft);border:1px solid var(--warn-line);border-radius:12px}
+.ok{background:var(--inn-soft);border:1px solid #A9C4B9;border-radius:12px}
+.notice{border-radius:12px;border:1px solid #A9C4B9}
+.notice.warn{border-color:var(--warn-line)}
+
+/* Skjema */
+.field input,.field select,.field textarea,.filters input,.filters select,.addrow input{border-radius:9px;border-color:var(--line);background:var(--surface)}
+.listedit .li{border-radius:10px;background:var(--surface)}
+.seg{border-radius:10px}
+
+/* Dialoger og innlogging */
+.overlay{background:rgba(15,28,24,.5)}
+.sheet{background:var(--surface);border-top:3px solid var(--gold)}
+.thumbs .t{border-radius:10px}
+.toast{background:var(--head);color:#FFFDF7;border-radius:10px;border-bottom:2px solid var(--gold)}
+.login{background:linear-gradient(var(--head) 0 220px,transparent 220px)}
+.login .card{border-top:3px solid var(--gold);box-shadow:0 14px 34px rgba(26,31,28,.12)}
+.login h1{font-size:2rem}
+.linkbtn{color:var(--ink)}
 </style>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
@@ -868,10 +970,11 @@ function downloadReport(open){
   const ledger = [...d.rows].sort((a,b)=>a.nr-b.nr).map(r=>`<tr><td>${r.nr}</td><td>${fmtDate(r.dato)}</td><td>${esc(r.beskrivelse)}${r.korrigerer?` <i>(korr. #${r.korrigerer})</i>`:""}</td><td>${esc(r.kategori)}</td><td class="r">${kr(signed(r))}</td><td>${(r.bilag||[]).length||(r.bilagArkiv?esc(r.bilagArkiv):r.korrigerer?"–":"MANGLER")}</td></tr>`).join("");
   const diff = d.avst!=null ? Math.round((d.avst-d.ubBank)*100)/100 : null;
   const html = `<!doctype html><html lang="nb"><head><meta charset="utf-8"><title>Årsregnskap ${S.year} – ${esc(S.settings.navn)}</title>
-<style>body{font-family:"IBM Plex Sans",Arial,sans-serif;color:#111;max-width:780px;margin:32px auto;padding:0 20px;font-size:13px;line-height:1.45}
-h1{font-size:22px;margin:0}h2{font-size:15px;margin:28px 0 8px;border-bottom:1px solid #999;padding-bottom:4px}
-table{width:100%;border-collapse:collapse}td,th{padding:5px 6px;border-bottom:1px solid #ddd;text-align:left;vertical-align:top}th{font-size:11px;text-transform:uppercase;color:#555}
-.r{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}tr.sum td{font-weight:700;border-top:2px solid #111}tr.grp td{background:#f0f0f0;font-weight:600}
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Newsreader:opsz,wght@6..72,600&display=swap">
+<style>body{font-family:"Atkinson Hyperlegible",Arial,sans-serif;color:#1A1F1C;max-width:780px;margin:32px auto;padding:0 20px;font-size:13px;line-height:1.45}
+h1,h2{font-family:Newsreader,Georgia,serif;font-weight:600;color:#16342E}h1{font-size:26px;margin:0;padding-bottom:8px;border-bottom:3px solid #A87A16}h2{font-size:17px;margin:28px 0 8px;border-bottom:1px solid #E2DACA;padding-bottom:4px}
+table{width:100%;border-collapse:collapse}td,th{padding:5px 6px;border-bottom:1px solid #ddd;text-align:left;vertical-align:top}th{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:#6F6A5E}
+.r{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}tr.sum td{font-weight:700;border-top:2px solid #16342E}tr.grp td{background:#F7F3E9;font-weight:700}
 .sig{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:60px}.sig div{border-top:1px solid #111;padding-top:4px}
 .muted{color:#666}@media print{body{margin:0}h2{break-after:avoid}}</style></head><body>
 <h1>Årsregnskap ${S.year}</h1><div class="muted">${esc(S.settings.navn)}${S.settings.orgnr?` · Org.nr. ${esc(S.settings.orgnr)}`:""} · Regnskapsperiode 01.01.${S.year}–31.12.${S.year}</div>
