@@ -280,6 +280,19 @@ main{padding-block:28px 120px;gap:22px}
 .login .card{border-top:3px solid var(--gold);box-shadow:0 14px 34px rgba(26,31,28,.12)}
 .login h1{font-size:2rem}
 .linkbtn{color:var(--ink)}
+.sheet.wide{max-width:860px}
+.bi-list{display:grid;gap:10px}
+.bi{border:1px solid var(--line);border-radius:12px;padding:12px;display:grid;gap:10px;background:var(--surface)}
+.bi.off{background:var(--surface-2)}
+.bi.off .bi-body{display:none}
+.bi-head{display:flex;gap:10px;align-items:flex-start;cursor:pointer}
+.bi-head input{width:20px;height:20px;margin:2px 0 0;flex:none}
+.bi-head .t{flex:1;min-width:0;display:grid;gap:3px}
+.bi-head .t b{overflow-wrap:anywhere;font-weight:600}
+.bi-head .meta{font-size:.8rem;color:var(--muted);display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.bi-head .a{font-weight:700;text-align:right}
+.bi-sum{display:grid;gap:8px;background:var(--surface);padding:12px 0 4px;border-top:1px solid var(--line)}
+@media (min-width:700px){.bi-sum{position:sticky;bottom:-20px}}
 </style>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
@@ -495,6 +508,9 @@ function vKassebok(){
   const kats = [...new Set([...S.settings.kategorier.inn, ...S.settings.kategorier.ut, GJELD_KAT, UAVKLART])];
   return `<section class="section">
     <div class="section-head"><h2>Kassebok ${S.year}</h2><span class="hint">${all.length} posteringer · ny får bilag #${nextNr(S.year)}</span></div>
+    ${canWrite?`<div class="panel pad" style="display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap">
+      <span class="hint">Last opp transaksjonslista fra nettbanken (CSV), så lager kasseboka forslag til posteringer som du går gjennom før de lagres.</span>
+      <button class="btn" id="bankBtn">Importer fra bank</button><input id="bankFile" type="file" accept=".csv,.txt,text/csv" hidden></div>`:""}
     <div class="filters">
       <input id="q" type="search" placeholder="Søk i beskrivelse, beløp, bilagsnr" value="${esc(S.q)}">
       <select id="fKat"><option value="">Alle kategorier</option>${kats.map(k=>`<option ${S.fKat===k?"selected":""}>${esc(k)}</option>`).join("")}</select>
@@ -732,6 +748,10 @@ function bindView(){
     $("fKat").onchange=e=>{S.fKat=e.target.value;render();};
     $("fArr").onchange=e=>{S.fArr=e.target.value;render();};
     $("fBilag").onchange=e=>{S.fBilag=e.target.value;render();};
+    if ($("bankBtn")){
+      $("bankBtn").onclick=()=>$("bankFile").click();
+      $("bankFile").onchange=e=>{ const f=e.target.files[0]; e.target.value=""; if(f) startBankImport(f); };
+    }
   }
   if (S.tab==="budsjett") m.querySelectorAll("[data-bud]").forEach(inp=>inp.onchange=()=>{
     const v = inp.value.trim()==="" ? 0 : parseAmt(inp.value);
@@ -826,8 +846,8 @@ $("fab").onclick=()=>openForm();
 
 /* ---------- Skjema: ny postering ---------- */
 function closeModal(){ $("modal").innerHTML=""; document.body.style.overflow=""; if(S.loaded) render(); }
-function modal(html){
-  $("modal").innerHTML=`<div class="overlay" id="ov"><div class="sheet" role="dialog" aria-modal="true">${html}</div></div>`;
+function modal(html, cls){
+  $("modal").innerHTML=`<div class="overlay" id="ov"><div class="sheet ${cls||""}" role="dialog" aria-modal="true">${html}</div></div>`;
   document.body.style.overflow="hidden";
   $("ov").addEventListener("click",e=>{ if(e.target.id==="ov") closeModal(); });
 }
@@ -934,6 +954,8 @@ function openDetail(id){
       <dt>Arrangement</dt><dd>${esc(r.arrangement||"Ingen")}</dd>
       <dt>Betalt via</dt><dd>${r.konto==="kontant"?"Kontanter":r.konto==="gjeld"?"Ikke betalt ennå (satt av som gjeld)":"Bankkonto"}</dd>
       ${r.importert?`<dt>Kilde</dt><dd>${esc(r.importert)}</dd>`:""}
+      ${r.bankRef && !r.bankRef.includes("|")?`<dt>Bankens referanse</dt><dd class="num">${esc(r.bankRef)}</dd>`:""}
+      ${r.bankTekst && r.bankTekst!==r.beskrivelse?`<dt>Tekst i banken</dt><dd>${esc(r.bankTekst)}</dd>`:""}
       ${r.endringer?.length?`<dt>Endringer</dt><dd>${r.endringer.map(e=>esc(new Date(e.tid).toLocaleDateString("nb-NO")+": "+e.tekst)).join("<br>")}</dd>`:""}
       ${r.notat?`<dt>Notat</dt><dd>${esc(r.notat)}</dd>`:""}
       <dt>Registrert</dt><dd class="num">${r.opprettet?new Date(r.opprettet).toLocaleString("nb-NO"):""}</dd>
@@ -1103,6 +1125,218 @@ async function openStored(id, navn, type){
     if (visning){ if (w) w.location=u; else location.href=u; }
     else { const a=document.createElement("a"); a.href=u; a.download=navn||"dokument"; document.body.appendChild(a); a.click(); a.remove(); }
   }catch(e){ if (w) w.close(); toast("Kunne ikke åpne filen."); }
+}
+
+/* ---------- Import fra bank (transaksjonsliste som CSV) ---------- */
+// Leser en CSV-fil fra nettbanken og gjør hver linje om til et forslag til postering.
+// Ingenting lagres før brukeren har gått gjennom forslagene og trykket «Før posteringer».
+function csvRows(text){
+  text = text.replace(/^﻿/,"");
+  const first = text.split(/\r?\n/,1)[0]||"";
+  const sep = [";","\t",","].map(x=>[x,first.split(x).length]).sort((a,b)=>b[1]-a[1])[0][0];
+  const out=[]; let row=[], cur="", q=false;
+  for (let i=0;i<text.length;i++){
+    const c=text[i];
+    if (q){ if (c==='"'){ if (text[i+1]==='"'){cur+='"';i++;} else q=false; } else cur+=c; }
+    else if (c==='"' && cur==="") q=true;
+    else if (c===sep){ row.push(cur); cur=""; }
+    else if (c==="\n"){ row.push(cur); out.push(row); row=[]; cur=""; }
+    else if (c!=="\r") cur+=c;
+  }
+  if (cur!=="" || row.length){ row.push(cur); out.push(row); }
+  return out.filter(r=>r.some(x=>x.trim()!==""));
+}
+function bankAmt(v){
+  let s = String(v??"").replace(/[\s ]|kr/gi,"").replace(/−/g,"-"); if (!s) return 0;
+  const neg = /^-|-$|^\(.*\)$/.test(s); s = s.replace(/[-+()]/g,"");
+  const lc=s.lastIndexOf(","), ld=s.lastIndexOf(".");
+  if (lc>-1 && ld>-1) s = lc>ld ? s.replace(/\./g,"").replace(",",".") : s.replace(/,/g,"");
+  else if (lc>-1) s = s.replace(",",".");
+  else if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g,"");
+  const n = Number(s); return isFinite(n) ? (neg?-n:n) : NaN;
+}
+function bankDate(v){
+  const s = String(v??"").trim(); let m;
+  if ((m = s.match(/^(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{2}|\d{4})$/))) return `${m[3].length===2?"20"+m[3]:m[3]}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}`;
+  if ((m = s.match(/^(\d{4})-(\d{2})-(\d{2})/))) return `${m[1]}-${m[2]}-${m[3]}`;
+  return "";
+}
+function parseBank(text){
+  const rows = csvRows(text);
+  const hi = rows.findIndex(r=>r.some(c=>/dato/i.test(c)));
+  if (hi<0) return {feil:"Fant ingen overskriftslinje med «Dato». Last ned transaksjonslista som CSV fra nettbanken og prøv igjen."};
+  const head = rows[hi].map(h=>h.trim().toLowerCase());
+  const col = (...res) => { for (const re of res){ const i=head.findIndex(h=>re.test(h)); if (i>-1) return i; } return -1; };
+  const iDato = col(/^dato$/,/^bokf/,/^utf.rt/,/dato/);
+  const iTekst = col(/^beskrivelse$/,/^tekst$/,/^forklaring$/,/beskrivelse|tekst|forklaring|melding/);
+  const iInn = col(/^inn$/,/^inn p/,/^inn\b/,/kredit/), iUt = col(/^ut$/,/^ut fra/,/^ut\b/,/debet/);
+  const iBelop = col(/^bel.p$/,/bel.p/);
+  const iRef = col(/arkivref/,/^referanse$/,/ref/);
+  if (iTekst<0 || (iBelop<0 && (iInn<0 || iUt<0))) return {feil:"Fant ikke kolonnene for beskrivelse og beløp (Inn/Ut) i fila."};
+  const tx=[], sett={}; let hoppet=0;
+  rows.slice(hi+1).forEach(r=>{
+    const dato = bankDate(r[iDato]);
+    let sg = iBelop>-1 && String(r[iBelop]??"").trim()!=="" ? bankAmt(r[iBelop]) : Math.abs(bankAmt(r[iInn])||0) - Math.abs(bankAmt(r[iUt])||0);
+    sg = Math.round(sg*100)/100;
+    if (!dato || !sg || isNaN(sg)){ hoppet++; return; }
+    const raaFull = String(r[iTekst]??"").trim();
+    // Banken gjentar ofte beløpet helt til høyre i teksten. Det tas bort fra beskrivelsen.
+    const tekst = raaFull.replace(/\s{2,}-?[\d. ]+,\d{2}\s*$/,"").replace(/\s+/g," ").trim() || "Banktransaksjon";
+    const raa = raaFull.replace(/\s+/g," ");
+    let ref = iRef>-1 ? String(r[iRef]??"").trim() : "";
+    if (!ref){ const k=`${dato}|${sg}|${raa}`; sett[k]=(sett[k]||0)+1; ref = k+(sett[k]>1?"|"+sett[k]:""); }
+    tx.push({dato, sg, type: sg>0?"inn":"ut", belop:Math.abs(sg), tekst, raa, ref});
+  });
+  tx.sort((a,b)=>a.dato.localeCompare(b.dato));
+  return {tx, hoppet};
+}
+function bankForslag(t){
+  const K = S.settings.kategorier, txt = t.tekst.toLowerCase(), y = +t.dato.slice(0,4);
+  const pick = (type,re) => K[type].find(k=>re.test(k.toLowerCase()));
+  const ord = k => (k.toLowerCase().match(/[a-zæøå]{4,}/)||[""])[0];
+  let kat="", hvorfor="";
+  // 1. Lært av tidligere posteringer med samme tekst fra banken
+  const tok = s => new Set(String(s).toLowerCase().replace(/[^a-zæøå ]/g," ").split(/\s+/).filter(w=>w.length>2));
+  const a = tok(t.raa); let best=null, bs=0;
+  if (a.size) for (const r of S.rows){
+    if (r.kategori===UAVKLART || r.kategori===GJELD_KAT || r.korrigerer || r.korrigertAv || (signed(r)>0)!==(t.sg>0)) continue;
+    const b = tok(r.bankTekst||r.beskrivelse); if (!b.size) continue;
+    let f=0; a.forEach(w=>{ if (b.has(w)) f++; });
+    const sc = f/(a.size+b.size-f);
+    if (sc>bs || (sc===bs && best && r.dato>best.dato)){ bs=sc; best=r; }
+  }
+  if (best && bs>=0.6){
+    const ref = best.type==="ut" && t.type==="inn";
+    if (K[ref?"ut":t.type].includes(best.kategori)) return {kat:(ref?"ref|":"")+best.kategori, arr: arrFor(y).includes(best.arrangement)?best.arrangement:"", hvorfor:`Samme som #${best.nr} i ${best.aar}`};
+  }
+  // 2. Kjente ord i teksten
+  if (t.type==="inn"){
+    kat = /kontingent|fosterhjemsforening|\bnff\b|momskomp/.test(txt) ? pick("inn",/kontingent|nff/) :
+          /tipping|grasrot/.test(txt) ? pick("inn",/tipping|grasrot/) :
+          /rente/.test(txt) ? pick("inn",/rente/) :
+          /kalender/.test(txt) ? pick("inn",/kalender/) : "";
+    if (!kat) kat = K.inn.find(k=>ord(k) && txt.includes(ord(k)));
+    if (!kat){ const u = K.ut.find(k=>ord(k) && txt.includes(ord(k))); if (u) kat = "ref|"+u; }
+  } else {
+    kat = /omkostning|gebyr|bedriftsnett|årspris|årsavgift|kortavgift|nettbank/.test(txt) ? pick("ut",/gebyr/) :
+          /honorar/.test(txt) ? pick("ut",/honorar/) :
+          /blomst|gave/.test(txt) ? pick("ut",/blomst|gave/) : "";
+    if (!kat) kat = K.ut.find(k=>ord(k) && txt.includes(ord(k)));
+  }
+  if (kat) hvorfor = "Foreslått ut fra teksten";
+  // Arrangement: navnet uten årstall finnes i teksten
+  const arrs = arrFor(y).filter(x=>{ const n=x.toLowerCase().replace(/\d+/g,"").trim(); return n.length>3 && txt.includes(n); });
+  const arr = arrs.find(x=>(x.match(/\d{4}/)||[])[0] && txt.includes(x.match(/\d{4}/)[0])) || arrs.find(x=>arrYear(x)===y) || arrs[0] || "";
+  return {kat: kat||UAVKLART, arr, hvorfor};
+}
+async function startBankImport(file){
+  let text;
+  try{
+    const buf = await file.arrayBuffer();
+    try{ text = new TextDecoder("utf-8",{fatal:true}).decode(buf); }catch(e){ text = new TextDecoder("windows-1252").decode(buf); }
+  }catch(e){ return toast("Filen kunne ikke leses."); }
+  const res = parseBank(text);
+  if (res.feil) return toast(res.feil);
+  if (!res.tx.length) return toast("Fant ingen transaksjoner i fila.");
+  // Sjekk mot det som allerede er ført, så ingenting blir ført to ganger
+  const brukt = new Set(), dager = (x,y) => Math.abs((new Date(x)-new Date(y))/864e5);
+  const T = res.tx.map(t=>{
+    const fort = S.rows.find(r=>r.bankRef && r.bankRef===t.ref);
+    if (fort) return {...t, status:"fort", match:fort, on:false};
+    const kand = S.rows.filter(r=>!brukt.has(r.id) && !r.bankRef && !r.korrigerer && !r.korrigertAv && (r.konto||"bank")==="bank"
+      && Math.abs(signed(r)-t.sg)<0.005 && dager(r.dato,t.dato)<=7).sort((a,b)=>dager(a.dato,t.dato)-dager(b.dato,t.dato))[0];
+    const f = bankForslag(t);
+    if (kand){ brukt.add(kand.id); return {...t, ...f, status:"ligner", match:kand, on:false}; }
+    return {...t, ...f, status:"ny", on:true};
+  });
+  const opt = (v,label,sel) => `<option value="${esc(v)}" ${sel?"selected":""}>${esc(label)}</option>`;
+  const katOpts = t => {
+    const K = S.settings.kategorier, vet = `<optgroup label="Vet ikke ennå">${opt(UAVKLART,UAVKLART,t.kat===UAVKLART)}</optgroup>`;
+    const main = K[t.type].map(k=>opt(k,k,t.kat===k)).join("");
+    if (t.type==="inn") return main + `<optgroup label="Refusjon eller egenandel (trekkes fra en kostnad)">${K.ut.map(k=>opt("ref|"+k,k,t.kat==="ref|"+k)).join("")}</optgroup>` + vet;
+    return main + `<optgroup label="Ikke en kostnad i år">${opt(GJELD_KAT,GJELD_KAT,t.kat===GJELD_KAT)}</optgroup>` + vet;
+  };
+  const chip = t => t.status==="fort" ? `<span class="chip">Allerede ført som #${t.match.nr}</span>` :
+    t.status==="ligner" ? `<span class="chip warn">Ligner på #${t.match.nr} (${fmtDate(t.match.dato)})</span>` :
+    t.kat===UAVKLART ? `<span class="chip warn">Velg kategori</span>` : `<span class="chip ink">${esc(t.hvorfor)}</span>`;
+  const ant = k => T.filter(t=>t.status===k).length;
+  modal(`
+    <h2>Importer fra bank</h2>
+    <p class="hint">${esc(file.name)} · ${T.length} transaksjoner fra ${fmtDate(T[0].dato)} til ${fmtDate(T[T.length-1].dato)}. Se over forslagene, rett det som ikke stemmer, og før dem inn. Ingenting lagres før du trykker på knappen nederst.</p>
+    ${ant("fort")?`<div class="notice">${ant("fort")} av transaksjonene er importert fra banken før og hoppes over.</div>`:""}
+    ${ant("ligner")?`<div class="notice warn">${ant("ligner")} av transaksjonene ser ut til å være ført for hånd allerede (samme beløp, omtrent samme dato). De er ikke haket av. Hak av hvis de likevel skal føres.</div>`:""}
+    ${res.hoppet?`<div class="notice warn">${res.hoppet} linje${res.hoppet>1?"r":""} i fila manglet dato eller beløp og er ikke tatt med.</div>`:""}
+    <div class="bi-list">${T.map((t,i)=>`
+      <div class="bi ${t.on?"":"off"}" data-bi="${i}">
+        <label class="bi-head">
+          <input type="checkbox" data-on="${i}" ${t.on?"checked":""} ${t.status==="fort"?"disabled":""} aria-label="Før denne transaksjonen">
+          <span class="t"><b>${esc(t.tekst)}</b><span class="meta"><span class="num">${fmtDate(t.dato)}</span>${chip(t)}</span></span>
+          <span class="a num ${t.type==="inn"?"amt-inn":"amt-ut"}">${t.type==="inn"?"+":"−"} ${kr(t.belop)}</span>
+        </label>
+        ${t.status==="fort"?"":`<div class="bi-body formgrid">
+          <div class="field full"><label for="biB${i}">Beskrivelse</label><input id="biB${i}" value="${esc(t.tekst)}"></div>
+          <div class="field"><label for="biK${i}">Kategori</label><select id="biK${i}">${katOpts(t)}</select></div>
+          <div class="field"><label for="biA${i}">Arrangement</label><select id="biA${i}"><option value="">Ingen</option>${arrFor(+t.dato.slice(0,4), t.arr).map(x=>`<option ${t.arr===x?"selected":""}>${esc(x)}</option>`).join("")}</select></div>
+        </div>`}
+      </div>`).join("")}</div>
+    <div class="bi-sum">
+      <div class="hint" id="biSum"></div>
+      ${assets?`<label style="display:flex;gap:8px;align-items:center;font-size:.9rem"><input type="checkbox" id="biDok" checked> Legg ved transaksjonslista under Årsdokumenter, så revisor kan se den</label>`:""}
+      <div id="biMsg" class="notice warn" hidden></div>
+      <div class="actions"><button class="btn" id="biNo">Avbryt</button><button class="btn primary" id="biYes">Før posteringer</button></div>
+    </div>`, "wide");
+  const valgte = () => T.map((t,i)=>({t,i})).filter(x=>x.t.on);
+  const oppsum = () => {
+    const v = valgte(), inn = v.reduce((m,x)=>m+(x.t.sg>0?x.t.sg:0),0), ut = v.reduce((m,x)=>m+(x.t.sg<0?-x.t.sg:0),0);
+    const aar = [...new Set(v.map(x=>+x.t.dato.slice(0,4)))];
+    let s = `${v.length} valgt · inn <span class="num amt-inn">${kr(inn)}</span> · ut <span class="num amt-ut">${kr(ut)}</span>`;
+    if (aar.length===1){
+      const y=aar[0], etter = saldo(y).bank + (sums(S.rows.filter(r=>r.aar===y)).byKonto.bank||0) + inn - ut;
+      s += `<br>Banksaldo i kasseboka etter import: <span class="num">${kr(etter)}</span>. Den skal være lik saldoen i nettbanken etter siste transaksjon.`;
+    }
+    $("biSum").innerHTML = s;
+    $("biYes").disabled = !v.length; $("biYes").textContent = v.length ? `Før ${v.length} postering${v.length>1?"er":""}` : "Ingen valgt";
+  };
+  document.querySelectorAll("[data-on]").forEach(c=>c.onchange=()=>{
+    const i=+c.dataset.on; T[i].on=c.checked; document.querySelector(`[data-bi="${i}"]`).classList.toggle("off",!c.checked); oppsum();
+  });
+  oppsum();
+  $("biNo").onclick=closeModal;
+  $("biYes").onclick=async()=>{
+    const msg = m => { $("biMsg").textContent=m; $("biMsg").hidden=false; };
+    const v = valgte();
+    for (const {i} of v) if (!$("biB"+i).value.trim()){ $("biB"+i).focus(); return msg("Skriv en kort beskrivelse på alle posteringene, så revisor skjønner hva de gjelder."); }
+    $("biYes").disabled=true; $("biNo").disabled=true; $("biYes").textContent="Lagrer …";
+    try{
+      const now = new Date().toISOString(), neste={}, batch = db.batch(); let sisteAar=S.year;
+      for (const {t,i} of v){
+        const aar = +t.dato.slice(0,4); sisteAar = aar;
+        let nr = neste[aar] ?? nextNr(aar), id;
+        for(;;){ id=`${aar}-${String(nr).padStart(4,"0")}`; const snap=await db.doc("posteringer/"+id).get(); if(!snap.exists) break; nr++; }
+        neste[aar] = nr+1;
+        let kat=$("biK"+i).value, type=t.type, belop=t.belop;
+        if (kat.startsWith("ref|")){ kat=kat.slice(4); type="ut"; belop=-belop; }
+        const row = {nr, aar, dato:t.dato, type, belop, beskrivelse:$("biB"+i).value.trim(), kategori:kat, arrangement:$("biA"+i).value||"",
+          konto:"bank", notat:"", bilag:[], bankRef:t.ref, bankTekst:t.raa, importert:`Bank (${file.name})`, opprettet:now};
+        // For gebyrer og renter er kontoutskriften selve bilaget. Andre posteringer trenger faktura eller kvittering.
+        if (/gebyr|rente/i.test(kat)) row.bilagArkiv = "Kontoutskrift";
+        batch.set(db.doc("posteringer/"+id), row);
+      }
+      await batch.commit();
+      if (!S.hasSettings) await saveSettings({});
+      let dokFeil="";
+      if ($("biDok")?.checked){
+        try{
+          $("biYes").textContent="Laster opp lista …";
+          const nye = await uploadFiles([file], {any:true});
+          const dk={...(S.settings.dokumenter||{})}; dk[sisteAar]=[...(dk[sisteAar]||[]), ...nye];
+          await saveSettings({dokumenter:dk});
+        }catch(ex){ dokFeil=" Transaksjonslista ble ikke lagt ved, legg den til under Årsrapport."; }
+      }
+      S.year=sisteAar; S.q=""; S.fKat=""; S.fArr=""; S.fBilag="";
+      closeModal(); setTab("kassebok"); toast(`${v.length} postering${v.length>1?"er":""} ført fra banken.${dokFeil}`);
+    }catch(ex){ $("biYes").disabled=false; $("biNo").disabled=false; oppsum(); msg("Ingenting ble lagret: "+writeErr(ex)); }
+  };
 }
 
 /* ---------- Import av et helt år ---------- */
