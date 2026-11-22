@@ -350,6 +350,7 @@ const DEFAULTS = {
 };
 const GJELD_KAT = "Betaling av gjeld fra tidligere år";
 const UAVKLART = "Uavklart – må avklares";
+const DELTAKER_KAT = "Deltakeravgift / egenandeler";
 const nf = new Intl.NumberFormat("nb-NO",{minimumFractionDigits:2,maximumFractionDigits:2});
 const kr = n => nf.format(Math.round((n||0)*100)/100);
 const esc = s => String(s ?? "").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -511,6 +512,7 @@ function vKassebok(){
     ${canWrite?`<div class="panel pad" style="display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap">
       <span class="hint">Last opp transaksjonslista fra nettbanken (CSV), så lager kasseboka forslag til posteringer som du går gjennom før de lagres.</span>
       <button class="btn" id="bankBtn">Importer fra bank</button><input id="bankFile" type="file" accept=".csv,.txt,text/csv" hidden></div>`:""}
+    ${(n=>canWrite && n?`<div class="notice warn" style="display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap"><span>${n} innbetaling${n>1?"er":""} er ført som refusjon/egenandel og trukket fra en kostnad. Er det deltakeravgifter, bør de stå som inntekt.</span><button class="btn small" id="omBtn">Se over og gjør om</button></div>`:"")((sk=>refRows().filter(r=>!sk.has(r.id)).length)(refSkjult()))}
     <div class="filters">
       <input id="q" type="search" placeholder="Søk i beskrivelse, beløp, bilagsnr" value="${esc(S.q)}">
       <select id="fKat"><option value="">Alle kategorier</option>${kats.map(k=>`<option ${S.fKat===k?"selected":""}>${esc(k)}</option>`).join("")}</select>
@@ -760,6 +762,7 @@ function bindView(){
     $("fKat").onchange=e=>{S.fKat=e.target.value;render();};
     $("fArr").onchange=e=>{S.fArr=e.target.value;render();};
     $("fBilag").onchange=e=>{S.fBilag=e.target.value;render();};
+    if ($("omBtn")) $("omBtn").onclick=openOmgjor;
     if ($("bankBtn")){
       $("bankBtn").onclick=()=>$("bankFile").click();
       $("bankFile").onchange=e=>{ const f=e.target.files[0]; e.target.value=""; if(f) startBankImport(f); };
@@ -1223,6 +1226,49 @@ async function openStored(id, navn, type){
   }catch(e){ if (w) w.close(); toast("Kunne ikke åpne filen."); }
 }
 
+/* ---------- Gjør om refusjon/egenandel til inntekt ---------- */
+// Innbetalinger som er ført som fratrekk i en kostnad kan gjøres om til vanlig inntekt (f.eks. deltakeravgift).
+// Bilagsnummer, dato og beløp endres ikke. Endringen lagres i historikken til hver postering.
+const refRows = () => yearRows().filter(r=>r.type==="ut" && r.belop<0 && !r.korrigerer && !r.korrigertAv);
+function refSkjult(){ try{ return new Set(JSON.parse(localStorage.getItem("kb-ref-skjult")||"[]")); }catch(e){ return new Set(); } }
+function openOmgjor(){
+  const rows = refRows().sort((a,b)=>a.nr-b.nr); if (!rows.length) return;
+  const K = S.settings.kategorier, finnes = K.inn.find(k=>/deltaker|egenandel/i.test(k));
+  const valg = K.inn.map(k=>`<option ${k===finnes?"selected":""}>${esc(k)}</option>`).join("") + (finnes?"":`<option value="${esc(DELTAKER_KAT)}" selected>${esc(DELTAKER_KAT)} (ny kategori)</option>`);
+  modal(`
+    <h2>Gjør om til inntekt</h2>
+    <p class="hint">Disse innbetalingene er ført som refusjon/egenandel, altså trukket fra en kostnad. Deltakeravgifter bør stå som inntekt. Hak av dem som skal gjøres om. Bilagsnummer, dato og beløp endres ikke, og endringen lagres i historikken til hver postering. Resultatet og banksaldoen blir de samme som før.</p>
+    <div class="field"><label for="omKat">Inntektskategori</label><select id="omKat">${valg}</select></div>
+    <div class="bi-list">${rows.map(r=>`
+      <div class="bi" data-bi="${esc(r.id)}"><label class="bi-head">
+        <input type="checkbox" data-om="${esc(r.id)}" checked aria-label="Gjør om bilag ${r.nr}">
+        <span class="t"><b>#${r.nr} · ${esc(r.beskrivelse)}</b><span class="meta"><span class="num">${fmtDate(r.dato)}</span><span class="chip">Trukket fra: ${esc(r.kategori)}</span>${r.arrangement?`<span class="chip ink">${esc(r.arrangement)}</span>`:""}</span></span>
+        <span class="a num amt-inn">+ ${kr(-r.belop)}</span>
+      </label></div>`).join("")}</div>
+    <div class="bi-sum">
+      <div id="omMsg" class="notice warn" hidden></div>
+      <div class="actions"><button class="btn" id="omNo">Avbryt</button><button class="btn" id="omSkjul">Disse er riktige, ikke spør igjen</button><button class="btn primary" id="omYes"></button></div>
+    </div>`, "wide");
+  const valgte = () => [...document.querySelectorAll("[data-om]")].filter(c=>c.checked).map(c=>rows.find(r=>r.id===c.dataset.om));
+  const upd = () => { const n=valgte().length; $("omYes").disabled=!n; $("omYes").textContent = n?`Gjør om ${n} postering${n>1?"er":""}`:"Ingen valgt"; };
+  document.querySelectorAll("[data-om]").forEach(c=>c.onchange=()=>{ document.querySelector(`[data-bi="${c.dataset.om}"]`).classList.toggle("off",!c.checked); upd(); });
+  upd();
+  $("omNo").onclick=closeModal;
+  $("omSkjul").onclick=()=>{ try{ localStorage.setItem("kb-ref-skjult", JSON.stringify([...new Set([...refSkjult(), ...rows.map(r=>r.id)])])); }catch(e){} closeModal(); };
+  $("omYes").onclick=async()=>{
+    const v = valgte(), k = $("omKat").value, tid = new Date().toISOString();
+    $("omYes").disabled=true; $("omNo").disabled=true; $("omSkjul").disabled=true; $("omYes").textContent="Lagrer …";
+    try{
+      const batch = db.batch();
+      for (const r of v) batch.update(db.doc("posteringer/"+r.id), {type:"inn", belop:-r.belop, kategori:k,
+        endringer:[...(r.endringer||[]), {tid, tekst:`Endret fra refusjon/egenandel under «${r.kategori}» til inntekt «${k}»`}]});
+      await batch.commit();
+      if (!S.settings.kategorier.inn.includes(k)) await saveSettings({kategorier:{...S.settings.kategorier, inn:[...S.settings.kategorier.inn, k]}});
+      closeModal(); toast(`${v.length} postering${v.length>1?"er":""} gjort om til inntekt`);
+    }catch(ex){ $("omNo").disabled=false; $("omSkjul").disabled=false; upd(); $("omMsg").textContent="Ingenting ble endret: "+writeErr(ex); $("omMsg").hidden=false; }
+  };
+}
+
 /* ---------- Import fra bank (transaksjonsliste som CSV) ---------- */
 // Leser en CSV-fil fra nettbanken og gjør hver linje om til et forslag til postering.
 // Ingenting lagres før brukeren har gått gjennom forslagene og trykket «Før posteringer».
@@ -1302,8 +1348,7 @@ function bankForslag(t){
     if (sc>bs || (sc===bs && best && r.dato>best.dato)){ bs=sc; best=r; }
   }
   if (best && bs>=0.6){
-    const ref = best.type==="ut" && t.type==="inn";
-    if (K[ref?"ut":t.type].includes(best.kategori)) return {kat:(ref?"ref|":"")+best.kategori, arr: arrFor(y).includes(best.arrangement)?best.arrangement:"", hvorfor:`Samme som #${best.nr} i ${best.aar}`};
+    if (best.type===t.type && K[t.type].includes(best.kategori)) return {kat:best.kategori, arr: arrFor(y).includes(best.arrangement)?best.arrangement:"", hvorfor:`Samme som #${best.nr} i ${best.aar}`};
   }
   // 2. Kjente ord i teksten
   if (t.type==="inn"){
@@ -1312,7 +1357,8 @@ function bankForslag(t){
           /rente/.test(txt) ? pick("inn",/rente/) :
           /kalender/.test(txt) ? pick("inn",/kalender/) : "";
     if (!kat) kat = K.inn.find(k=>ord(k) && txt.includes(ord(k)));
-    if (!kat){ const u = K.ut.find(k=>ord(k) && txt.includes(ord(k))); if (u) kat = "ref|"+u; }
+    // Innbetaling som nevner et arrangement eller en aktivitet er som regel en deltakeravgift. Den føres som inntekt, ikke som fratrekk i kostnaden.
+    if (!kat && (/deltaker|egenandel|påmelding/.test(txt) || K.ut.some(k=>ord(k) && txt.includes(ord(k))) || arrNavn(y, txt))) kat = pick("inn",/deltaker|egenandel/) || DELTAKER_KAT;
   } else {
     kat = /omkostning|gebyr|bedriftsnett|årspris|årsavgift|kortavgift|nettbank/.test(txt) ? pick("ut",/gebyr/) :
           /honorar/.test(txt) ? pick("ut",/honorar/) :
@@ -1321,9 +1367,12 @@ function bankForslag(t){
   }
   if (kat) hvorfor = "Foreslått ut fra teksten";
   // Arrangement: navnet uten årstall finnes i teksten
+  return {kat: kat||UAVKLART, arr: arrNavn(y, txt), hvorfor};
+}
+// Arrangementet som nevnes i en banktekst (navnet uten årstall), eller "" hvis ingen.
+function arrNavn(y, txt){
   const arrs = arrFor(y).filter(x=>{ const n=x.toLowerCase().replace(/\d+/g,"").trim(); return n.length>3 && txt.includes(n); });
-  const arr = arrs.find(x=>(x.match(/\d{4}/)||[])[0] && txt.includes(x.match(/\d{4}/)[0])) || arrs.find(x=>arrYear(x)===y) || arrs[0] || "";
-  return {kat: kat||UAVKLART, arr, hvorfor};
+  return arrs.find(x=>(x.match(/\d{4}/)||[])[0] && txt.includes(x.match(/\d{4}/)[0])) || arrs.find(x=>arrYear(x)===y) || arrs[0] || "";
 }
 async function startBankImport(file){
   let text;
@@ -1348,7 +1397,8 @@ async function startBankImport(file){
   const opt = (v,label,sel) => `<option value="${esc(v)}" ${sel?"selected":""}>${esc(label)}</option>`;
   const katOpts = t => {
     const K = S.settings.kategorier, vet = `<optgroup label="Vet ikke ennå">${opt(UAVKLART,UAVKLART,t.kat===UAVKLART)}</optgroup>`;
-    const main = K[t.type].map(k=>opt(k,k,t.kat===k)).join("");
+    let main = K[t.type].map(k=>opt(k,k,t.kat===k)).join("");
+    if (t.type==="inn" && !K.inn.includes(DELTAKER_KAT) && !K.inn.some(k=>/deltaker|egenandel/i.test(k))) main += opt(DELTAKER_KAT, DELTAKER_KAT+" (ny kategori)", t.kat===DELTAKER_KAT);
     if (t.type==="inn") return main + `<optgroup label="Refusjon eller egenandel (trekkes fra en kostnad)">${K.ut.map(k=>opt("ref|"+k,k,t.kat==="ref|"+k)).join("")}</optgroup>` + vet;
     return main + `<optgroup label="Ikke en kostnad i år">${opt(GJELD_KAT,GJELD_KAT,t.kat===GJELD_KAT)}</optgroup>` + vet;
   };
@@ -1404,7 +1454,7 @@ async function startBankImport(file){
     for (const {i} of v) if (!$("biB"+i).value.trim()){ $("biB"+i).focus(); return msg("Skriv en kort beskrivelse på alle posteringene, så revisor skjønner hva de gjelder."); }
     $("biYes").disabled=true; $("biNo").disabled=true; $("biYes").textContent="Lagrer …";
     try{
-      const now = new Date().toISOString(), neste={}, batch = db.batch(); let sisteAar=S.year;
+      const now = new Date().toISOString(), neste={}, batch = db.batch(); let sisteAar=S.year, nyKat=false;
       for (const {t,i} of v){
         const aar = +t.dato.slice(0,4); sisteAar = aar;
         let nr = neste[aar] ?? nextNr(aar), id;
@@ -1412,6 +1462,7 @@ async function startBankImport(file){
         neste[aar] = nr+1;
         let kat=$("biK"+i).value, type=t.type, belop=t.belop;
         if (kat.startsWith("ref|")){ kat=kat.slice(4); type="ut"; belop=-belop; }
+        if (kat===DELTAKER_KAT) nyKat=true;
         const row = {nr, aar, dato:t.dato, type, belop, beskrivelse:$("biB"+i).value.trim(), kategori:kat, arrangement:$("biA"+i).value||"",
           konto:"bank", notat:"", bilag:[], bankRef:t.ref, bankTekst:t.raa, importert:`Bank (${file.name})`, opprettet:now};
         // For gebyrer og renter er kontoutskriften selve bilaget. Andre posteringer trenger faktura eller kvittering.
@@ -1420,6 +1471,7 @@ async function startBankImport(file){
       }
       await batch.commit();
       if (!S.hasSettings) await saveSettings({});
+      if (nyKat && !S.settings.kategorier.inn.includes(DELTAKER_KAT)) await saveSettings({kategorier:{...S.settings.kategorier, inn:[...S.settings.kategorier.inn, DELTAKER_KAT]}});
       let dokFeil="";
       if ($("biDok")?.checked){
         try{
