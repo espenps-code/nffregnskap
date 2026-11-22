@@ -674,6 +674,18 @@ function vRapport(){
       <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" id="dlReport">Last ned årsrapport</button><button class="btn" id="openReport">Åpne for utskrift</button><button class="btn" id="dlCsv">Last ned kassebok (CSV)</button></div></div>
     <p class="hint">«Åpne for utskrift» viser rapporten i en ny fane der du velger Skriv ut → Lagre som PDF. Kasseboka lastes ned som en fil som åpnes i Excel. Bilagene ligger her og kan vises for revisor direkte fra hver postering.</p>
     ${miss?`<div class="notice warn">${miss} postering${miss>1?"er":""} mangler bilag. Revisor vil spørre etter disse.</div>`:""}
+    ${(sd=>`<div class="panel pad section">
+      <h3>Statusrapport til styret</h3>
+      <p class="hint">En kort rapport til styremøtet: saldo, resultat hittil i år, budsjett mot faktisk, arrangementer og hva som har skjedd siden forrige møte. Før inn siste transaksjoner fra banken først, så tallene er ferske.</p>
+      <div class="formgrid">
+        <div class="field"><label for="srFra">Perioden starter (forrige styremøte)</label><input id="srFra" type="date" value="${sd.fra}" min="${S.year}-01-01" max="${S.year}-12-31"></div>
+        <div class="field"><label for="srTil">Status per dato</label><input id="srTil" type="date" value="${sd.til}" min="${S.year}-01-01" max="${S.year}-12-31"></div>
+        <div class="field"><label for="srBank">Saldo i nettbanken på statusdatoen (valgfritt)</label><input id="srBank" inputmode="decimal" placeholder="Kontrollerer at kasseboka stemmer"></div>
+        <label style="display:flex;gap:8px;align-items:center;font-size:.9rem;align-self:end;padding-bottom:10px"><input type="checkbox" id="srTekst"> Vis beskrivelsen på enkeltposteringer (kan inneholde navn)</label>
+        <div class="field full"><label for="srKom">Kasserers kommentar (valgfritt)</label><textarea id="srKom" placeholder="F.eks. Tilskudd fra Bufdir er ventet i desember. Familiesamlingen gikk med overskudd."></textarea></div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" id="srOpen">Åpne for utskrift</button><button class="btn" id="srDl">Last ned</button></div>
+    </div>`)(statusDefaults())}
     <div class="panel tablewrap">${resultTable(d)}</div>
     <div class="panel tablewrap">${balanceTable(d)}</div>
     <div class="panel pad section">
@@ -782,6 +794,7 @@ function bindView(){
         await saveSettings({dokumenter:dk}); render(); toast("Dokument lagt til");
       }catch(ex){ e.target.disabled=false; toast(ex.__upload?ex.message:writeErr(ex)); }
     };
+    $("srOpen").onclick=()=>makeStatus(true); $("srDl").onclick=()=>makeStatus(false);
     $("dlReport").onclick=()=>downloadReport(false); $("openReport").onclick=()=>downloadReport(true); $("dlCsv").onclick=downloadCsv;
     if ($("avst")) $("avst").onchange=e=>{
       const v = e.target.value.trim()==="" ? null : parseAmt(e.target.value);
@@ -1045,6 +1058,89 @@ function downloadCsv(){
   const head = ["Bilagsnr","Dato","Type","Beløp","Beskrivelse","Kategori","Arrangement","Konto","Korrigerer bilag","Korrigert av bilag","Antall bilagsfiler","Bilag oppbevares","Notat"];
   const rows = [...yearRows()].sort((a,b)=>a.nr-b.nr).map(r=>[r.nr, fmtDate(r.dato), r.type==="inn"?"Inntekt":"Utgift", n(signed(r)), q(r.beskrivelse), q(r.kategori), q(r.arrangement), r.konto==="kontant"?"Kontant":r.konto==="gjeld"?"Gjeld":"Bank", r.korrigerer||"", r.korrigertAv||"", (r.bilag||[]).length, q(r.bilagArkiv), q(r.notat)].join(";"));
   save(`kassebok-${S.year}.csv`, "﻿"+[head.join(";"),...rows].join("\r\n"));
+}
+/* ---------- Statusrapport til styret ---------- */
+// Én side med økonomisk status per en valgt dato, til bruk på styremøter gjennom året.
+function statusDefaults(){
+  const y = S.year, now = today();
+  const til = y===+now.slice(0,4) ? now : `${y}-12-31`;
+  let fra = `${y}-01-01`;
+  try{ const f = localStorage.getItem("kb-styre-"+y); if (f && f>=fra && f<til) fra = f; }catch(e){}
+  return {fra, til};
+}
+function statusHtml(o){
+  const y = S.year, st = S.settings;
+  const rows = yearRows().filter(r=>r.dato<=o.til), per = rows.filter(r=>r.dato>=o.fra);
+  const s = sums(rows), sp = sums(per), sal = saldo(y), b = budsjett(y);
+  const bank = (sal.bank||0)+(s.byKonto.bank||0), kont = (sal.kontant||0)+(s.byKonto.kontant||0), gjeld = (sal.gjeld||0)+s.gjeld;
+  const harBud = Object.values(b).some(v=>v);
+  const tb = t => Object.entries(b).filter(([k])=>k.startsWith(t+"|")).reduce((m,[,v])=>m+v,0);
+  const lines = type => [...st.kategorier[type], UAVKLART].map(k=>{
+    const key=type+"|"+k, v=s.byKat[key]||0, p=sp.byKat[key]||0, bud=b[key]||0;
+    if (!v && !p && !bud) return "";
+    const avvik = type==="inn" ? v-bud : bud-v;
+    return `<tr><td>${esc(k)}</td><td class="r">${p?kr(p):"–"}</td><td class="r">${kr(v)}</td>${harBud?`<td class="r">${bud?kr(bud):"–"}</td><td class="r ${bud&&avvik<0?"warn":""}">${bud?kr(avvik):"–"}</td>`:""}</tr>`;
+  }).join("");
+  const sumRow = (t,p,v,bud,avv) => `<tr class="sum"><td>${t}</td><td class="r">${kr(p)}</td><td class="r">${kr(v)}</td>${harBud?`<td class="r">${kr(bud)}</td><td class="r ${avv<0?"warn":""}">${kr(avv)}</td>`:""}</tr>`;
+  const cols = harBud?5:3;
+  const arrs = st.arrangementer.map(a=>[a,sums(rows.filter(r=>r.arrangement===a)),rows.some(r=>r.arrangement===a)]).filter(x=>x[2]);
+  const store = per.filter(r=>!r.korrigerer && !r.korrigertAv && r.kategori!==GJELD_KAT).sort((a,c)=>Math.abs(c.belop)-Math.abs(a.belop)).slice(0,10);
+  const uav = rows.filter(r=>r.kategori===UAVKLART && !r.korrigerer && !r.korrigertAv), miss = missingBilag(rows).filter(r=>!r.korrigertAv);
+  const siste = rows.reduce((m,r)=>r.dato>m?r.dato:m,"");
+  const diff = o.nettbank!=null ? Math.round((o.nettbank-bank)*100)/100 : null;
+  const kpi = (l,v,sub) => `<div class="kpi"><span>${l}</span><b>${v}</b>${sub?`<small>${sub}</small>`:""}</div>`;
+  return `<!doctype html><html lang="nb"><head><meta charset="utf-8"><title>Økonomisk status ${fmtDate(o.til)} – ${esc(st.navn)}</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Newsreader:opsz,wght@6..72,600&display=swap">
+<style>body{font-family:"Atkinson Hyperlegible",Arial,sans-serif;color:#1A1F1C;max-width:780px;margin:32px auto;padding:0 20px;font-size:13px;line-height:1.45}
+h1,h2{font-family:Newsreader,Georgia,serif;font-weight:600;color:#16342E}h1{font-size:26px;margin:0;padding-bottom:8px;border-bottom:3px solid #A87A16}h2{font-size:17px;margin:24px 0 8px;border-bottom:1px solid #E2DACA;padding-bottom:4px}
+table{width:100%;border-collapse:collapse}td,th{padding:5px 6px;border-bottom:1px solid #ddd;text-align:left;vertical-align:top}th{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:#6F6A5E}
+.r{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}tr.sum td{font-weight:700;border-top:2px solid #16342E}tr.grp td{background:#F7F3E9;font-weight:700}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:16px 0 4px}.kpi{border:1px solid #E2DACA;border-radius:8px;padding:10px 12px;display:grid;gap:2px}
+.kpi span{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:#6F6A5E}.kpi b{font-size:19px;font-variant-numeric:tabular-nums}.kpi small{color:#666}
+.warn{color:#9A3B26;font-weight:700}.muted{color:#666}ul{margin:6px 0;padding-left:20px}.kom{white-space:pre-wrap;border-left:3px solid #A87A16;padding:4px 12px;margin:8px 0}
+@media print{body{margin:0}h2{break-after:avoid}tr{break-inside:avoid}}</style></head><body>
+<h1>Økonomisk status per ${fmtDate(o.til)}</h1><div class="muted">${esc(st.navn)}${st.orgnr?` · Org.nr. ${esc(st.orgnr)}`:""} · Statusrapport til styret · Regnskapsår ${y}</div>
+<div class="kpis">
+  ${kpi("På bankkonto", kr(bank), diff===null?"":diff===0?"Stemmer med nettbanken":`Nettbanken viser ${kr(o.nettbank)}`)}
+  ${kont?kpi("Kontantkasse", kr(kont)):""}
+  ${gjeld?kpi("Ubetalte kostnader", kr(gjeld), "Satt av, ikke betalt ennå"):""}
+  ${kpi("Resultat hittil i år", kr(s.res), harBud?`Budsjett for året: ${kr(tb("inn")-tb("ut"))}`:"")}
+  ${kpi("Resultat i perioden", kr(sp.res), `${fmtDate(o.fra)}–${fmtDate(o.til)}`)}
+</div>
+${diff!==null && diff!==0?`<p class="warn">Kasseboka avviker ${kr(diff)} fra saldoen i nettbanken. Noe mangler eller er ført feil.</p>`:""}
+${o.kommentar?`<h2>Kasserers kommentar</h2><div class="kom">${esc(o.kommentar)}</div>`:""}
+<h2>Inntekter og kostnader</h2>
+<table><thead><tr><th>Kategori</th><th class="r">Perioden</th><th class="r">Hittil i år</th>${harBud?`<th class="r">Årsbudsjett</th><th class="r">Mot budsjett</th>`:""}</tr></thead><tbody>
+  <tr class="grp"><td colspan="${cols}">Inntekter</td></tr>${lines("inn")||`<tr><td colspan="${cols}">Ingen inntekter ført</td></tr>`}
+  ${sumRow("Sum inntekter", sp.inn, s.inn, tb("inn"), s.inn-tb("inn"))}
+  <tr class="grp"><td colspan="${cols}">Kostnader</td></tr>${lines("ut")||`<tr><td colspan="${cols}">Ingen kostnader ført</td></tr>`}
+  ${sumRow("Sum kostnader", sp.ut, s.ut, tb("ut"), tb("ut")-s.ut)}
+  <tr class="sum"><td>Resultat</td><td class="r">${kr(sp.res)}</td><td class="r">${kr(s.res)}</td>${harBud?`<td class="r">${kr(tb("inn")-tb("ut"))}</td><td class="r">${kr(s.res-(tb("inn")-tb("ut")))}</td>`:""}</tr>
+</tbody></table>
+<p class="muted">Perioden er ${fmtDate(o.fra)}–${fmtDate(o.til)}.${harBud?" «Mot budsjett» viser for inntekter hvor mye som er kommet inn utover årsbudsjettet, og for kostnader hvor mye som er igjen å bruke. Rødt minustall betyr at inntekten ikke er nådd ennå, eller at kostnaden er over budsjett.":" Budsjett for året er ikke lagt inn i kasseboka."}</p>
+${arrs.length?`<h2>Arrangementer</h2><table><thead><tr><th>Arrangement</th><th class="r">Inntekter</th><th class="r">Kostnader</th><th class="r">Netto</th></tr></thead><tbody>${arrs.map(([a,x])=>`<tr><td>${esc(a)}</td><td class="r">${kr(x.inn)}</td><td class="r">${kr(x.ut)}</td><td class="r">${kr(x.res)}</td></tr>`).join("")}</tbody></table>`:""}
+${store.length?`<h2>Største bevegelser i perioden</h2><table><thead><tr><th>Dato</th>${o.tekst?`<th>Beskrivelse</th>`:""}<th>Kategori</th><th>Arrangement</th><th class="r">Beløp</th></tr></thead><tbody>${store.map(r=>`<tr><td>${fmtDate(r.dato)}</td>${o.tekst?`<td>${esc(r.beskrivelse)}</td>`:""}<td>${esc(r.kategori)}${r.type==="ut"&&r.belop<0?" (refusjon/egenandel)":""}</td><td>${esc(r.arrangement||"")}</td><td class="r">${kr(signed(r))}</td></tr>`).join("")}</tbody></table>`:""}
+<h2>Status for regnskapsføringen</h2>
+<ul>
+  <li>${siste?`Kasseboka er ført til og med ${fmtDate(siste)}, med ${rows.length} posteringer i ${y}.`:`Ingen posteringer er ført i ${y} ennå.`}</li>
+  <li>${uav.length?`<span class="warn">${uav.length} postering${uav.length>1?"er":""} på til sammen ${kr(uav.reduce((m,r)=>m+Math.abs(r.belop),0))} er uavklart</span> og mangler kategori.`:"Ingen posteringer er uavklart."}</li>
+  <li>${miss.length?`<span class="warn">${miss.length} postering${miss.length>1?"er":""} mangler bilag</span> (kvittering eller faktura).`:"Alle posteringer har bilag."}</li>
+  <li>${diff===null?"Banksaldoen er ikke kontrollert mot nettbanken i denne rapporten.":diff===0?`Banksaldoen er kontrollert mot nettbanken per ${fmtDate(o.til)} og stemmer.`:`Banksaldoen avviker ${kr(diff)} fra nettbanken per ${fmtDate(o.til)}.`}</li>
+</ul>
+<p class="muted" style="margin-top:26px">Laget ${new Date().toLocaleDateString("nb-NO")} fra kasseboka. Tallene er foreløpige og ikke revidert.</p>
+</body></html>`;
+}
+function makeStatus(open){
+  const fra=$("srFra").value, til=$("srTil").value;
+  if (!fra || !til || fra>til) return toast("Velg en fra-dato som er før til-datoen.");
+  if (+til.slice(0,4)!==S.year || +fra.slice(0,4)!==S.year) return toast(`Datoene må være i ${S.year}. Bytt regnskapsår øverst for et annet år.`);
+  const nb = $("srBank").value.trim()==="" ? null : parseAmt($("srBank").value);
+  if (Number.isNaN(nb)) return toast("Skriv saldoen i nettbanken som tall.");
+  const html = statusHtml({fra, til, nettbank:nb, tekst:$("srTekst").checked, kommentar:$("srKom").value.trim()});
+  // Neste rapport starter dagen etter denne
+  try{ const d=new Date(til+"T12:00:00"); d.setDate(d.getDate()+1); localStorage.setItem("kb-styre-"+S.year, d.toISOString().slice(0,10)); }catch(e){}
+  if (open){ const w=window.open(URL.createObjectURL(new Blob([html],{type:"text/html"})),"_blank"); if(!w) toast("Tillat popup-vinduer for å åpne rapporten."); return; }
+  save(`statusrapport-${til}.html`, html);
 }
 function downloadReport(open){
   const d = reportData();
