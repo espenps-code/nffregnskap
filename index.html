@@ -678,12 +678,12 @@ function vRapport(){
     ${miss?`<div class="notice warn">${miss} postering${miss>1?"er":""} mangler bilag. Revisor vil spørre etter disse.</div>`:""}
     ${(sd=>`<div class="panel pad section">
       <h3>Statusrapport til styret</h3>
-      <p class="hint">En kort rapport til styremøtet: saldo, resultat hittil i år, budsjett mot faktisk, arrangementer og hva som har skjedd siden forrige møte. Før inn siste transaksjoner fra banken først, så tallene er ferske.</p>
+      <p class="hint">En kort rapport til styremøtet: saldo, resultat hittil i år, budsjett mot faktisk, arrangementer og utviklingen siden forrige møte. Før inn siste transaksjoner fra banken først, så tallene er ferske.</p>
       <div class="formgrid">
         <div class="field"><label for="srFra">Perioden starter (forrige styremøte)</label><input id="srFra" type="date" value="${sd.fra}" min="${S.year}-01-01" max="${S.year}-12-31"></div>
         <div class="field"><label for="srTil">Status per dato</label><input id="srTil" type="date" value="${sd.til}" min="${S.year}-01-01" max="${S.year}-12-31"></div>
         <div class="field"><label for="srBank">Saldo i nettbanken på statusdatoen (valgfritt)</label><input id="srBank" inputmode="decimal" placeholder="Kontrollerer at kasseboka stemmer"></div>
-        <label style="display:flex;gap:8px;align-items:center;font-size:.9rem;align-self:end;padding-bottom:10px"><input type="checkbox" id="srTekst"> Vis beskrivelsen på enkeltposteringer (kan inneholde navn)</label>
+        <div class="field"><label for="srPost">Enkeltposteringer</label><select id="srPost"><option value="">Ikke ta med (anbefalt)</option><option value="kat">Ta med de ti største, uten beskrivelse</option><option value="tekst">Ta med de ti største, med beskrivelse (kan inneholde navn)</option></select></div>
         <div class="field full"><label for="srKom">Kasserers kommentar (valgfritt)</label><textarea id="srKom" placeholder="F.eks. Tilskudd fra Bufdir er ventet i desember. Familiesamlingen gikk med overskudd."></textarea></div>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" id="srOpen">Åpne for utskrift</button><button class="btn" id="srDl">Last ned</button></div>
@@ -1122,7 +1122,7 @@ ${o.kommentar?`<h2>Kasserers kommentar</h2><div class="kom">${esc(o.kommentar)}<
 </tbody></table>
 <p class="muted">Perioden er ${fmtDate(o.fra)}–${fmtDate(o.til)}.${harBud?" «Mot budsjett» viser for inntekter hvor mye som er kommet inn utover årsbudsjettet, og for kostnader hvor mye som er igjen å bruke. Rødt minustall betyr at inntekten ikke er nådd ennå, eller at kostnaden er over budsjett.":" Budsjett for året er ikke lagt inn i kasseboka."}</p>
 ${arrs.length?`<h2>Arrangementer</h2><table><thead><tr><th>Arrangement</th><th class="r">Inntekter</th><th class="r">Kostnader</th><th class="r">Netto</th></tr></thead><tbody>${arrs.map(([a,x])=>`<tr><td>${esc(a)}</td><td class="r">${kr(x.inn)}</td><td class="r">${kr(x.ut)}</td><td class="r">${kr(x.res)}</td></tr>`).join("")}</tbody></table>`:""}
-${store.length?`<h2>Største bevegelser i perioden</h2><table><thead><tr><th>Dato</th>${o.tekst?`<th>Beskrivelse</th>`:""}<th>Kategori</th><th>Arrangement</th><th class="r">Beløp</th></tr></thead><tbody>${store.map(r=>`<tr><td>${fmtDate(r.dato)}</td>${o.tekst?`<td>${esc(r.beskrivelse)}</td>`:""}<td>${esc(r.kategori)}${r.type==="ut"&&r.belop<0?" (refusjon/egenandel)":""}</td><td>${esc(r.arrangement||"")}</td><td class="r">${kr(signed(r))}</td></tr>`).join("")}</tbody></table>`:""}
+${o.poster && store.length?`<h2>Største bevegelser i perioden</h2><table><thead><tr><th>Dato</th>${o.tekst?`<th>Beskrivelse</th>`:""}<th>Kategori</th><th>Arrangement</th><th class="r">Beløp</th></tr></thead><tbody>${store.map(r=>`<tr><td>${fmtDate(r.dato)}</td>${o.tekst?`<td>${esc(r.beskrivelse)}</td>`:""}<td>${esc(r.kategori)}${r.type==="ut"&&r.belop<0?" (refusjon/egenandel)":""}</td><td>${esc(r.arrangement||"")}</td><td class="r">${kr(signed(r))}</td></tr>`).join("")}</tbody></table>`:""}
 <h2>Status for regnskapsføringen</h2>
 <ul>
   <li>${siste?`Kasseboka er ført til og med ${fmtDate(siste)}, med ${rows.length} posteringer i ${y}.`:`Ingen posteringer er ført i ${y} ennå.`}</li>
@@ -1139,7 +1139,7 @@ function makeStatus(open){
   if (+til.slice(0,4)!==S.year || +fra.slice(0,4)!==S.year) return toast(`Datoene må være i ${S.year}. Bytt regnskapsår øverst for et annet år.`);
   const nb = $("srBank").value.trim()==="" ? null : parseAmt($("srBank").value);
   if (Number.isNaN(nb)) return toast("Skriv saldoen i nettbanken som tall.");
-  const html = statusHtml({fra, til, nettbank:nb, tekst:$("srTekst").checked, kommentar:$("srKom").value.trim()});
+  const html = statusHtml({fra, til, nettbank:nb, poster:$("srPost").value!=="", tekst:$("srPost").value==="tekst", kommentar:$("srKom").value.trim()});
   // Neste rapport starter dagen etter denne
   try{ const d=new Date(til+"T12:00:00"); d.setDate(d.getDate()+1); localStorage.setItem("kb-styre-"+S.year, d.toISOString().slice(0,10)); }catch(e){}
   if (open){ const w=window.open(URL.createObjectURL(new Blob([html],{type:"text/html"})),"_blank"); if(!w) toast("Tillat popup-vinduer for å åpne rapporten."); return; }
